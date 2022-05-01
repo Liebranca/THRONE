@@ -24,6 +24,7 @@ package main;
   # for test
   use lib $ENV{'ARPATH'}.'/THRONE/';
   use cell;
+  use scene;
 
 # ---   *   ---   *   ---
 
@@ -36,8 +37,6 @@ package main;
 
 # ---   *   ---   *   ---
 
-# ---   *   ---   *   ---
-
 my @ttysz=(0,0);lycon::ttysz(\@ttysz);
 
 sub draw {
@@ -47,17 +46,13 @@ sub draw {
 
 };
 
-cell::mkgrid(@ttysz);
-
-my $cell=cell::GRID->[0]->[0];
-$cell->occupy('poptat0');
-
-$cell=cell::GRID->[0]->[1];
-
+scene::nit();
 draw();
 
-if(!$cell->is_sl_free) {
-  my $ent=$cell->n_sl->okupa;
+my $ents=scene::ents_in_view();
+
+for my $ent(@$ents) {
+
   printf "$ent\n";
 
 };

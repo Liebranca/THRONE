@@ -65,16 +65,6 @@ sub SZ_Y {return $CACHE{-SZ_Y};};
 sub wx {return (shift)->{-WX};};
 sub wy {return (shift)->{-WY};};
 
-sub occupy {
-  my $self=shift;
-  my $ok=shift;
-
-  $self->{-OCCU}=$ok;
-
-};
-
-sub free {return (shift)->{-OCCU}=undef;};
-
 sub okupa {return (shift)->{-OCCU};};
 
 sub is_occu {return defined ((shift)->{-OCCU});};
@@ -85,6 +75,19 @@ sub is_aflame {return (shift)->state & F_FIRE;};
 sub is_wet {return (shift)->state & F_WATER;};
 sub is_poisnd {return (shift)->state & F_ACID;};
 sub is_onhill {return (shift)->state & F_HILL;};
+
+# ---   *   ---   *   ---
+# setters
+
+sub occupy {
+  my $self=shift;
+  my $ok=shift;
+
+  $self->{-OCCU}=$ok;
+
+};
+
+sub free {return (shift)->{-OCCU}=undef;};
 
 # ---   *   ---   *   ---
 # get neighboring cell
