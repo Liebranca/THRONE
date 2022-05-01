@@ -1,0 +1,66 @@
+#!/usr/bin/perl
+# ---   *   ---   *   ---
+# THRONE
+# Small RTS
+#
+# LIBRE SOFTWARE
+# Licensed under GNU GPL3
+# be a bro and inherit
+#
+# CONTRIBUTORS
+# lyeb,
+# ---   *   ---   *   ---
+
+# deps
+package main;
+  use strict;
+  use warnings;
+
+  use lib $ENV{'ARPATH'}.'/lib/';
+
+  use lycon;
+  use cash;
+
+  # for test
+  use lib $ENV{'ARPATH'}.'/THRONE/';
+  use cell;
+
+# ---   *   ---   *   ---
+
+# TODO: classes
+#
+#   canvas
+#   cell
+#   scene
+#   entity
+
+# ---   *   ---   *   ---
+
+# ---   *   ---   *   ---
+
+my @ttysz=(0,0);lycon::ttysz(\@ttysz);
+
+sub draw {
+
+  my $s="\e[2J\e[0H".cell::MAP;
+  printf "$s\n";
+
+};
+
+cell::mkgrid(@ttysz);
+
+my $cell=cell::GRID->[0]->[0];
+$cell->occupy('poptat0');
+
+$cell=cell::GRID->[0]->[1];
+
+draw();
+
+if(!$cell->is_sl_free) {
+  my $ent=$cell->n_sl->okupa;
+  printf "$ent\n";
+
+};
+
+# ---   *   ---   *   ---
+1; # ret

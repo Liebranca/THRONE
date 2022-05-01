@@ -1,0 +1,11 @@
+# THRONE
+
+This is a (WIP) RTS game written (mostly) from scratch.
+
+Goals:
+
+  - [] ASCII 2D graphics (for now), top-down view
+  - [] Little micro-management
+  - [] Unit control through heroes
+  
+
