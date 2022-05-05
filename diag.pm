@@ -28,6 +28,29 @@ package diag;
 sub rect {return (shift)->{-RECT};};
 sub inner {return (shift)->rect->children->[0];};
 
+sub sel {
+
+  my $self=shift;
+  my $step=shift;
+
+  my $cap=@{$self->inner->text_lines()}-1;
+
+  my $prev=$self->{-SEL};
+  my $next=$prev+$step;
+
+  if($next<0) {
+    $next=0;
+
+  } elsif($next>$cap) {
+    $next=$cap;
+
+  };
+
+  $self->{-SEL}=$next;
+  return "$prev:$next";
+
+};
+
 # ---   *   ---   *   ---
 # constructor
 
@@ -48,7 +71,7 @@ sub nit {
   my $diag=bless {
 
     -RECT=>$sec,
-    -SEL=>undef,
+    -SEL=>0,
 
   },'diag';
 
@@ -62,7 +85,7 @@ sub nit {
 
   $inner->text($text);
 
-  $inner->fill();
+  $inner->fill(0,'0:0');
   $sec->draw();
   $inner->draw();
 
@@ -78,7 +101,7 @@ sub nit {
   my $inner=$self->inner;
 
   $inner->wipe();
-  $inner->fill(1);
+  $inner->fill(1,$self->sel(-1));
   $inner->draw();
 
 };sub sel_next {
@@ -87,7 +110,7 @@ sub nit {
   my $inner=$self->inner;
 
   $inner->wipe();
-  $inner->fill();
+  $inner->fill(0,$self->sel(+1));
   $inner->draw();
 
 };
