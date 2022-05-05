@@ -18,6 +18,7 @@ package main;
 
   use lib $ENV{'ARPATH'}.'/lib/';
 
+  use avt;
   use lycon;
   use cash;
 
@@ -25,6 +26,7 @@ package main;
   use lib $ENV{'ARPATH'}.'/THRONE/';
   use cell;
   use scene;
+  use diag;
 
 # ---   *   ---   *   ---
 
@@ -35,27 +37,75 @@ package main;
 #   scene
 #   entity
 
+# TODO: diag
+#
+#   dialog choices
+#   > highlight/de-highlight selected
+#   > adapt it to lycon-queue model
+
+# ---   *   ---   *   ---
+# global state
+
+my %CACHE=(
+
+  -TERMINATE=>0,
+  -CMENU=>undef,
+
+);
+
+# ---   *   ---   *   ---
+# getters
+
+;;sub TERMINATE {
+  avt::getset(\%CACHE,-TERMINATE,shift);
+
+};sub CMENU {
+  avt::getset(\%CACHE,-CMENU,shift);
+
+};
+
 # ---   *   ---   *   ---
 
-my @ttysz=(0,0);lycon::ttysz(\@ttysz);
+my $scroll_up=sub {CMENU->sel_prev();};
+my $scroll_down=sub {CMENU->sel_next();};
 
-sub draw {
+# ---   *   ---   *   ---
 
-  my $s="\e[2J\e[0H".cell::MAP;
-  printf "$s\n";
+my @KEYS=(
 
-};
+  [-AFWD,'up',$scroll_up,'',''],
+  [-ABAK,'down',$scroll_down,'',''],
 
-scene::nit();
-draw();
+  [-ALFT,'left','','',''],
+  [-ARGT,'right','','',''],
 
-my $ents=scene::ents_in_view();
+  [-RET,'ret','','',''],
+  [-JMP,'space','','',''],
 
-for my $ent(@$ents) {
+  [-ESC,'escape','','',
+    sub {TERMINATE(1);}
 
-  printf "$ent\n";
+  ],
 
-};
+);
+
+# ---   *   ---   *   ---
+
+lycon::nit();
+CMENU(diag::nit());
+
+for my $keyset(@KEYS) {
+
+  lycon::kbd::DEFINE(
+    @$keyset
+
+  );
+
+};lycon::kbd::nit();
+lycon::clk::nit(0x8000);
+
+lycon::loop::set_quit(sub {return TERMINATE;});
+lycon::loop::run();
 
 # ---   *   ---   *   ---
 1; # ret
