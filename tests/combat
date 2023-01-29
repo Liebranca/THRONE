@@ -13,9 +13,7 @@
   use English qw(-no_match_vars);
 
   use lib $ENV{'ARPATH'}.'/THRONE/';
-
-  use Time::HiRes qw(usleep);
-  use RPG::Grid;
+  use RPG::Actor;
 
 # ---   *   ---   *   ---
 

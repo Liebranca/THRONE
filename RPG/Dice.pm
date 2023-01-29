@@ -139,18 +139,6 @@ sub throw_no_dice($wrath) {
 };
 
 # ---   *   ---   *   ---
-# fakes getting a random number
-
-sub rng($self) {
-
-  my $out  = (rand(0x1000));
-  $out    %= $self->{sides};
-
-  return $out;
-
-};
-
-# ---   *   ---   *   ---
 # instas in cache
 
 sub get($wrath) {
@@ -182,16 +170,18 @@ sub fetch($class,$wrathr) {
 # ---   *   ---   *   ---
 # ^generates NdS
 
-sub roll($class,$self) {
+sub roll($class,$self=undef) {
 
-  my $out=0;
+  my $out=1;
 
   # conditional get
   $class->fetch(\$self)
-  if $self=~ $IRE;
+  if $self && $self=~ $IRE;
+
+  $self//=$class;
 
   for my $n(1..$self->{num}) {
-    $out+=1+$self->rng();
+    $out+=int(rand($self->{sides}-1)+0.49);
 
   };
 

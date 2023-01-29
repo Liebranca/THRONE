@@ -23,87 +23,177 @@ package RPG::Spell;
   use English qw(-no_match_vars);
 
   use lib $ENV{'ARPATH'}.'/THRONE/';
-  use parent 'RPG::St';
+  use RPG::Dice;
 
   use lib $ENV{'ARPATH'}.'/lib/sys';
   use Style;
 
+  use parent 'St';
+
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.1;#b
+  our $VERSION = v0.00.2;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
 # ROM
 
-  sub Reg_Vars($class) {return [
+  sub Frame_Vars($class) {return {
 
-    q(VOCIFERATE),
+    -autoload=>[qw(
+      neww
 
-    q(In the),
-      [qw(.degree 'third')],
+    )],
 
-    q(degree, I cast unto thee:),
-      [qw(.name 'Transfigurate')],
+  }};
 
-    q(, of the School of),
-      [qw(.school 'Raw Lytheknics')],
+  Readonly our $DEFAULTS=>{
 
-    q(! It is composed of),
-      [qw(.elements
-        'nothing'
-        'nothing'
-        'nothing'
+    # id
+    name    => 'Transfigurate',
+    school  => 'Raw Lytheknics',
 
-      )],
+    # score
+    degree  => 3,
+    elems   => [],
+    reqs    => [],
+    rolls   => [qw(1d8)],
 
-    q(, and it shall),
-      [qw(.desc 'endlessly reform!')]
+    # lore
+    desc    => (join q[ ],qw(
 
-  ]};
+      This vociferation
+      shall endlessly
+      reform
+
+    )),
+
+    # modes
+    on_any=>sub ($self,$actor) {
+
+      my ($x)=$self->roll();
+
+      say
+
+        "$actor->{name} ".
+        "chants $self->{name} ".
+
+        "with a score of $x"
+
+      ;
+
+    },
+
+    on_self   => $NOOP,
+    on_touch  => $NOOP,
+    on_target => $NOOP,
+    on_area   => $NOOP,
+
+    on_ally   => $NOOP,
+    on_foe    => $NOOP,
+
+  };
 
 # ---   *   ---   *   ---
+# GBL
 
-sub nit($class,%O) {
+  my $Frame=RPG::Spell->get_frame();
+
+# ---   *   ---   *   ---
+# IO
+
+  sub import(@slurp) {
+    my ($class,@args)=@slurp;
+    $Frame=$class->get_frame(@args);
+
+  };
+
+# ---   *   ---   *   ---
+# go through chks
+
+sub roll($self) {
+
+  my @out=();
+
+  for my $d(@{$self->{rolls}}) {
+    push @out,$d->roll();
+
+  };
+
+  return @out;
 
 };
 
 # ---   *   ---   *   ---
 
-RPG::Spell->subclan(
+sub cast($self,$actor) {
 
-  q[.degree]=>[
-    q(In the),
-    [qw('eleventh')],
+  for my $key(qw(
 
-  ],
+    on_any
 
-  q[.name]=>[
-    q(degree, I cast),
-    [qw('Irkalla')],
+    on_self
+    on_touch
+    on_target
+    on_area
 
-  ],
+    on_ally
+    on_foe
 
-  q[.school]=>[
-    q(, of the School of),
-    [qw('Hatred')],
+  )) {
 
-  ],
+    my $proc=$self->{$key};
 
-  q[.elements]=>[
-    q(... it is composed of),
-    [qw('evil' 'sight' 'annihilate')]
+    $proc->($self,$actor)
+    if $proc ne $NOOP;
 
-  ],
+  };
 
-  q[.desc]=>[
-    q(, and it will),
-    [qw('turn your bones to ash!')],
+};
 
-  ],
+# ---   *   ---   *   ---
+
+sub new($class,%O) {
+
+  $class->defnit(\%O);
+
+  my $rolls=$O{rolls};
+  for my $d(@$rolls) {
+    RPG::Dice->fetch(\$d);
+
+  };
+
+  my $self=bless {%O},$class;
+
+  return $self;
+
+};
+
+# ---   *   ---   *   ---
+# test
+
+my $lw=RPG::Spell->new(
+
+  name    => 'Last whisper',
+  school  => 'Hatred',
+
+  elems   => [qw(evil annihilate sight)],
+  reqs    => [qw(blackened disciple)],
+
+  desc    => (join q[ ],qw(
+
+    This vociferation reveals the
+    positions of enemies and grants
+    1d8 of bonus damage for the next
+    three attacks
+
+  )),
 
 );
+
+my $A={name=>'Hunter'};
+$lw->cast($A);
 
 # ---   *   ---   *   ---
 1; # ret
