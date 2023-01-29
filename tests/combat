@@ -1,0 +1,41 @@
+#!/usr/bin/perl
+#
+# dicerolls
+#
+# ---   *   ---   *   ---
+
+# deps
+
+  use v5.36.0;
+  use strict;
+  use warnings;
+
+  use English qw(-no_match_vars);
+
+  use lib $ENV{'ARPATH'}.'/THRONE/';
+
+  use Time::HiRes qw(usleep);
+  use RPG::Grid;
+
+# ---   *   ---   *   ---
+
+my $grid=RPG::Grid->new_frame();
+
+$grid->nit(8,8);
+my $act=$grid->new_actor([0,0]);
+
+my $i=0;
+while($i<7) {
+
+  $grid->draw();
+  $act->move('right');
+
+  $i++;
+  say "wat $i";
+
+  usleep(100000);
+
+};
+
+# ---   *   ---   *   ---
+1; # ret

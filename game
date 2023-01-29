@@ -24,6 +24,7 @@ package main;
 
   # for test
   use lib $ENV{'ARPATH'}.'/THRONE/';
+
   use cell;
   use scene;
   use diag;
@@ -76,7 +77,9 @@ my @KEYS=(
   [-ESC,'escape','','',
     sub {TERMINATE(1);}
 
-  ],[-RET,'ret','','',''],
+  ],
+
+  [-RET,'ret','','',''],
 
   [-AFWD,'up',$scroll_up,$scroll_up,''],
   [-ABAK,'down',$scroll_down,$scroll_down,''],
@@ -90,21 +93,11 @@ my @KEYS=(
 
 # ---   *   ---   *   ---
 
-lycon::nit();
-CMENU(diag::nit());
+cell::mkgrid(8,8);
 
-for my $keyset(@KEYS) {
+my $ent=entity::nit();
 
-  lycon::kbd::DEFINE(
-    @$keyset
-
-  );
-
-};lycon::kbd::nit();
-lycon::clk::nit();
-
-lycon::loop::set_quit(sub {return TERMINATE;});
-lycon::loop::run();
+cell::draw_map();
 
 # ---   *   ---   *   ---
 1; # ret
