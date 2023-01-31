@@ -47,8 +47,6 @@ package RPG::Dice;
 
   }x;
 
-  Readonly our $FRNG_W=>0x1000;
-
   sub Frame_Vars($class) {return {
     -wrath_of=>{}
 
@@ -62,20 +60,8 @@ package RPG::Dice;
 # ---   *   ---   *   ---
 # IO
 
-  sub bash {
-
-    my @call=(
-      q[perl],"-I$ENV{ARPATH}/THRONE",
-
-      q[-e],
-      q[use RPG::Dice @ARGV;],@ARGV
-
-    );
-
-    system {$call[0]} @call;
-
-  };
-
+  # run as main if die are input
+  # used to call roll from bash
   sub import(@slurp) {
 
     my ($class,@dies) = @slurp;
@@ -92,12 +78,13 @@ package RPG::Dice;
 
     } @dies;
 
+    # show result
     for my $x(@out) {
       say $x;
 
     };
 
-    return $class;
+    return 0;
 
   };
 
@@ -106,17 +93,27 @@ package RPG::Dice;
 
 sub new($class,$wrath) {
 
+  # validate in
   throw_no_dice($wrath)
   if !($wrath=~ $IRE);
 
+  # make new
   my $self=bless {
 
-    astr  => $wrath,
+    id    => $wrath,
 
     num   => $+{num},
     sides => $+{sides},
 
   },$class;
+
+  # ^add to table
+  $Frame
+
+    ->{ -wrath_of }
+    ->{ $wrath }
+
+  = $self;
 
   return $self;
 
