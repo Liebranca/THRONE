@@ -13,91 +13,114 @@
 
 # deps
 package main;
+
+  use v5.36.0;
   use strict;
   use warnings;
 
   use lib $ENV{'ARPATH'}.'/lib/';
 
-  use avt;
-  use lycon;
-  use cash;
+  use Lycon::Ctl;
+  use Lycon::Loop;
 
-  # for test
+  use GF::Mode::ANSI;
+
   use lib $ENV{'ARPATH'}.'/THRONE/';
 
-  use cell;
-  use scene;
-  use diag;
+  use RPG::Cell;
+  use RPG::Actor;
+
+# ---   *   ---   *   ---
+# GBL
+
+  my $Cache={
+    terminate => 0,
+    refresh   => 0,
+
+  };
+
+  my $Map  = RPG::Cell->grid();
+  my $Fact = RPG::Actor->faction();
+
+  my $Char = $Fact->member($Map,[0,0]);
+  my $Rock = $Fact->member($Map,[7,0],sprite=>q[#]);
 
 # ---   *   ---   *   ---
 
-# TODO: classes
-#
-#   canvas
-#   cell
-#   scene
-#   entity
+sub sim_step() {};
 
-# TODO: diag
-#
-#   dialog choices
-#   > highlight/de-highlight selected
-#   > adapt it to lycon-queue model
+sub on_refresh() {
 
-# ---   *   ---   *   ---
-# global state
+  drawcmd(
+    $Map->sput(),
 
-my %CACHE=(
-
-  -TERMINATE=>0,
-  -CMENU=>undef,
-
-);
-
-# ---   *   ---   *   ---
-# getters
-
-;;sub TERMINATE {
-  avt::getset(\%CACHE,-TERMINATE,shift);
-
-};sub CMENU {
-  avt::getset(\%CACHE,-CMENU,shift);
+  );
 
 };
 
 # ---   *   ---   *   ---
 
-my $scroll_up=sub {CMENU->sel_prev();};
-my $scroll_down=sub {CMENU->sel_next();};
+sub mvlft() {
+  drawcmd($Char->move(-1,0));
+
+};
+
+sub mvrgt() {
+  drawcmd($Char->move(1,0));
+
+};
+
+sub mvbak() {
+  drawcmd($Char->move(0,1));
+
+};
+
+sub mvfwd() {
+  drawcmd($Char->move(0,-1));
+
+};
 
 # ---   *   ---   *   ---
 
-my @KEYS=(
+Lycon::Ctl::register_events(
 
-  [-ESC,'escape','','',
-    sub {TERMINATE(1);}
+  escape=>[0,0,sub {
+    $Cache->{terminate}=1;
 
-  ],
+  }],
 
-  [-RET,'ret','','',''],
+  space=>[\&sim_step,0,0],
 
-  [-AFWD,'up',$scroll_up,$scroll_up,''],
-  [-ABAK,'down',$scroll_down,$scroll_down,''],
-
-  [-ALFT,'left','','',''],
-  [-ARGT,'right','','',''],
-
-  [-JMP,'space','','',''],
+  w=>[\&mvfwd,0,0],
+  a=>[\&mvlft,0,0],
+  s=>[\&mvbak,0,0],
+  d=>[\&mvrgt,0,0],
 
 );
 
 # ---   *   ---   *   ---
 
-cell::mkgrid(8,8);
+my $main=defmain(
 
-my $ent=entity::nit();
+  quit     => sub {
+    return $Cache->{terminate};
 
-cell::draw_map();
+  },
+
+  logic    => {
+    proc=>\&on_refresh,
+
+  },
+
+);
+
+drawcmd(
+  {proc=>'clear'},
+  $Map->sput(),
+
+);
+
+$main->(panic=>0);
 
 # ---   *   ---   *   ---
 1; # ret

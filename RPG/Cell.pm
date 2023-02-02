@@ -24,48 +24,41 @@ package RPG::Cell;
   use lib $ENV{'ARPATH'}.'/lib/sys/';
   use Style;
 
+  use lib $ENV{'ARPATH'}.'/lib/';
+
+  use GF::Vec4;
+  use GF::Rect;
+
   use parent 'St';
 
 # ---   *   ---   *   ---
 # ROM
 
-  # cell states
-  Readonly our $F_NONE=>0x00;
-  Readonly our $F_FIRE=>0x01;
-  Readonly our $F_WATER=>0x02;
-  Readonly our $F_ACID=>0x04;
-  Readonly our $F_HILL=>0x08;
+  sub Frame_Vars($class) {return {
 
-    # neighbors
-  Readonly our $N_UL=>0;
-  Readonly our $N_UM=>1;
-  Readonly our $N_UR=>2;
 
-  Readonly our $N_SL=>3;
-  Readonly our $N_SR=>4;
+    -autoload=>[qw(
 
-  Readonly our $N_DL=>5;
-  Readonly our $N_DM=>6;
-  Readonly our $N_DR=>7;
+      grid
+      cell
 
-# ---   *   ---   *   ---
-# aliases for neighbor fetches
+      in_bounds
 
-  Readonly my $GET_N=>{
+      sput
+      rows
+      prich
 
-    up_left=>[-1,-1],
-    up_mid=>[ 0,-1],
-    up_right=>[ 1,-1],
+    )],
 
-    left=>[-1, 0],
-    self=>[ 0, 0],
-    right=>[ 1, 0],
+    map_name => 'Darklands',
+    world_co => GF::Vec4->nit(55,40),
 
-    down_left=>[-1, 1],
-    down_mid=>[ 0, 1],
-    down_right=>[ 1, 1],
+    grid     => [],
+    limit    => [],
 
-  };
+    rect     => undef,
+
+  }};
 
 # ---   *   ---   *   ---
 
@@ -89,74 +82,162 @@ sub occupy($self,$ok) {
 
 };
 
-sub free($self) {return $self->{occu}=undef};
+sub free($self) {$self->{occu}=undef};
 
 # ---   *   ---   *   ---
-# get neighboring cell
+# get cell neighbor
 
-sub _getneigh($self,$x,$y) {
+sub neigh($self,$dx,$dy) {
 
-  my $frame=$self->{frame};
-  my $grid=$frame->{-cells};
+  my $frame  = $self->{frame};
+  my $grid   = $frame->{grid};
 
-  my ($sz_x,$sz_y)=(
+  my ($x,$y) = @{$self->{co}};
 
-    $frame->{-sz_x},
-    $frame->{-sz_y},
-
-  );
-
-  $y=$self->{wy}+$y;
-  $x=$self->{wx}+$x;
-
-  if($y==$sz_y) {$y=0;};
-  if($x==$sz_x) {$x=0;};
-
-  return $grid->[$y]->[$x];
-
-};
-
-# ---   *   ---   *   ---
-
-sub getneigh($self,$idex) {
-  return $self->_getneigh(@{$GET_N->{$idex}});
+  return $frame->cell($x+$dx,$y+$dy);
 
 };
 
 # ---   *   ---   *   ---
 # single cell instance
 
-sub nit($class,$frame,$x,$y) {
+sub cell($class,$frame,$x,$y) {
 
-  my $cell=bless {
+  my $self=undef;
+  my $grid=$frame->{grid};
 
-    wx=>$x,
-    wy=>$y,
+  goto SKIP if !$frame->in_bounds($x,$y);
 
-    _state=>$F_NONE,
-    occu=>undef,
+  $self=$grid->[$y]->[$x];
 
-    frame=>$frame,
+  if(!defined $self) {
 
-  },$class;
+    $self=bless {
 
-  return $cell;
+      co     => GF::Vec4->nit($x,$y),
+      occu   => undef,
+
+      frame  => $frame,
+
+    },$class;
+
+  };
+
+SKIP:
+  return $self;
+
+};
+
+# ---   *   ---   *   ---
+# chk x,y within grid
+
+sub in_bounds($class,$frame,$x,$y) {
+
+  my $out   = 1;
+
+  my $limit = $frame->{limit};
+  my $fetch = [$x,$y];
+
+  for my $i(0..1) {
+
+    my $b  = $limit->[$i];
+    my $co = $fetch->[$i];
+
+    if($co>=$b || $co<0) {
+      $out=0;
+      last;
+
+    };
+
+  };
+
+  return $out;
 
 };
 
 # ---   *   ---   *   ---
 
-sub get_sprite($self) {
+sub grid($class,%O) {
 
-  my $out;
+  # defaults
+  $O{height} //= 8;
+  $O{width}  //= 8;
 
-  if($self->is_free()) {
-    $out=q{ };
+  my $frame = $class->new_frame();
+  my $grid  = $frame->{grid};
 
-  } else {
-    $out=$self->{occu}->{sprite};
+  $frame->{limit}=[$O{width},$O{height}];
+
+  for my $y(0..$O{height}-1) {
+
+    my $row=$grid->[$y]=[];
+
+    for my $x(0..$O{width}-1) {
+      push @$row,$frame->cell($x,$y);
+
+    };
 
   };
+
+  my ($x,$y)=($O{width}+3,$O{height}+2);
+
+  $frame->{rect}=GF::Rect->nit(
+    "${x}x${y}",
+    border=>1,
+
+  );
+
+  return $frame;
+
+};
+
+# ---   *   ---   *   ---
+# out draw commands for
+# Lycon ctlproc
+
+sub sput($class,$frame) {
+  $frame->{rect}->textfit(
+    [$frame->rows()],
+
+  );
+
+  return $frame->{rect}->sput();
+
+};
+
+# ---   *   ---   *   ---
+# get content of each row of
+# cells as a string array
+
+sub rows($class,$frame) {
+
+  my @out  = ();
+  my $grid = $frame->{grid};
+
+  for my $row(@$grid) {
+
+    my $me=$NULLSTR;
+    for my $cell(@$row) {
+      $me.=($cell->{occu})
+        ? $cell->{occu}
+        : q[ ]
+        ;
+
+    };
+
+    push @out,$me;
+
+  };
+
+  return @out;
+
+};
+
+# ---   *   ---   *   ---
+# debug out
+
+sub prich($class,$frame) {
+  map {say $ARG} $frame->rows();
 
 };
 

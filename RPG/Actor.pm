@@ -26,15 +26,30 @@ package RPG::Actor;
   use parent 'St';
 
   use lib $ENV{'ARPATH'}.'/lib/';
-  use Vec4;
+  use GF::Vec4;
+  use GF::Icon;
 
   use lib $ENV{'ARPATH'}.'/THRONE/';
   use RPG::Cell;
 
 # ---   *   ---   *   ---
+# ROM
+
+  sub Frame_Vars($class) {return {
+
+    -autoload=>[qw(
+      member
+
+    )],
+
+    name => 'Circle of Four',
+
+  }};
+
+# ---   *   ---   *   ---
 # constructor
 
-sub nit($class,$frame,$co,%O) {
+sub member($class,$frame,$map,$co,%O) {
 
   # religion
   $O{faith}//=0;
@@ -50,30 +65,64 @@ sub nit($class,$frame,$co,%O) {
   $O{wit}//=1;
 
   # coordinates
-  $O{co}=Vec4->nit(@$co);
+  $O{co}=GF::Vec4->nit(@$co);
   $O{cell}=undef;
 
   # graphics
-  $O{sprite}//='$';
+  $O{sprite}//=$GF::Icon::PAIN_S0;
   $O{frame}=$frame;
 
-  my $actor=bless {%O},$class;
+  $O{at}=$map;
 
-  return $actor;
+  my $self=bless {%O},$class;
+  $self->move(0,0);
+
+  return $self;
 
 };
 
 # ---   *   ---   *   ---
 
-sub move($self,$dir) {
+sub faction($class,%O) {
+  return $class->new_frame(%O);
 
-  my $cell=$self->{cell};
-  $cell->free();
+};
 
-  $cell=$cell->getneigh($dir);
-  $cell->occupy($self);
+# ---   *   ---   *   ---
 
-  $self->{cell}=$cell;
+sub move($self,$x,$y) {
+
+  my @out=();
+
+  my $old=$self->{at}->cell(
+    $self->{co}->[0],
+    $self->{co}->[1],
+
+  );
+
+  my $cell=$old->neigh($x,$y);
+
+  if($cell && $cell->is_free()) {
+
+    $cell->occupy($self->{sprite});
+
+    $self->{cell}=$cell;
+    $old->free() if $old ne $cell;
+
+    $self->{co}=$cell->{co};
+    ($x,$y)=@{$self->{co}};
+
+    push @out,{
+      proc => 'mvcur',
+      args => [0,20],
+
+      ct   => "CHAR moves to [$x,$y]",
+
+    };
+
+  };
+
+  return @out;
 
 };
 
