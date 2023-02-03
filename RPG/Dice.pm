@@ -187,4 +187,14 @@ sub roll($class,$self=undef) {
 };
 
 # ---   *   ---   *   ---
+# ^leave array selection to chance
+
+sub pick($class,@ar) {
+
+  my $idex=$class->roll("1d".$#ar)-1;
+  return $ar[$idex];
+
+};
+
+# ---   *   ---   *   ---
 1; # ret

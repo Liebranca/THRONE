@@ -9,9 +9,10 @@
 #
 # CONTRIBUTORS
 # lyeb,
-# ---   *   ---   *   ---
 
+# ---   *   ---   *   ---
 # deps
+
 package RPG::Actor;
 
   use v5.36.0;
@@ -26,11 +27,20 @@ package RPG::Actor;
   use parent 'St';
 
   use lib $ENV{'ARPATH'}.'/lib/';
+
   use GF::Vec4;
   use GF::Icon;
 
   use lib $ENV{'ARPATH'}.'/THRONE/';
+
   use RPG::Cell;
+  use RPG::Social;
+
+# ---   *   ---   *   ---
+# info
+
+  our $VERSION = v0.00.2;#b
+  our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
 # ROM
@@ -42,40 +52,46 @@ package RPG::Actor;
 
     )],
 
-    name => 'Circle of Four',
+    name       => 'Circle of Four',
+
+    affiliates => [],
+    relations  => [],
+
+    goals      => [],
 
   }};
 
 # ---   *   ---   *   ---
 # constructor
 
-sub member($class,$frame,$map,$co,%O) {
+sub member($class,$frame,$at,$co,%O) {
 
-  # religion
-  $O{faith}//=0;
-  $O{hatred}//=0;
+  # defaults
+  $O{name}      //= 'Vagabond';
+  $O{sprite}    //= $GF::Icon::PAIN_S0;
+  $O{goals}     //= [];
+  $O{relations} //= [];
 
-  # combat
-  $O{grit}//=4;
-  $O{flair}//=4;
-  $O{temper}//=2;
+  $O{traits}    //= undef;
 
-  # misc
-  $O{charm}//=1;
-  $O{wit}//=1;
+  # make new
+  my $self=bless {
 
-  # coordinates
-  $O{co}=GF::Vec4->nit(@$co);
-  $O{cell}=undef;
+    name    => $O{name},
 
-  # graphics
-  $O{sprite}//=$GF::Icon::PAIN_S0;
-  $O{frame}=$frame;
+    at      => $at,
+    co      => GF::Vec4->nit(@$co),
 
-  $O{at}=$map;
+    cell    => undef,
+    faction => $frame,
 
-  my $self=bless {%O},$class;
+    persona => RPG::Social->new(traits=>$O{traits}),
+
+  },$class;
+
+  # spawn
   $self->move(0,0);
+  push @{$frame->{affi}},$self;
 
   return $self;
 
@@ -104,7 +120,7 @@ sub move($self,$x,$y) {
 
   if($cell && $cell->is_free()) {
 
-    $cell->occupy($self->{sprite});
+    $cell->occupy($self);
 
     $self->{cell}=$cell;
     $old->free() if $old ne $cell;
@@ -116,7 +132,7 @@ sub move($self,$x,$y) {
       proc => 'mvcur',
       args => [0,20],
 
-      ct   => "CHAR moves to [$x,$y]",
+      ct   => "$self->{name} moves to [$x,$y]",
 
     };
 
@@ -125,6 +141,26 @@ sub move($self,$x,$y) {
   return @out;
 
 };
+
+# ---   *   ---   *   ---
+
+sub social($self,$fn,@args) {
+
+  my ($ctx,$act,$feel)=$self->{persona}->$fn(@args);
+
+  say "On $ctx: $self->{name} chooses $act($feel)";
+
+};
+
+# ---   *   ---   *   ---
+# test
+
+my $map  = RPG::Cell->grid();
+my $band = RPG::Actor->faction(name=>'Traveling knights');
+
+my $boro = $band->member($map,[0,0],name=>'Boro');
+
+$boro->social(qw(situation encounter));
 
 # ---   *   ---   *   ---
 1; # ret

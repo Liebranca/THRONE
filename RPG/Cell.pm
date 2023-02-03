@@ -219,7 +219,7 @@ sub rows($class,$frame) {
     my $me=$NULLSTR;
     for my $cell(@$row) {
       $me.=($cell->{occu})
-        ? $cell->{occu}
+        ? $cell->{occu}->{sprite}
         : q[ ]
         ;
 
