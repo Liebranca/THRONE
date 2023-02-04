@@ -50,8 +50,10 @@ package RPG::Cell;
 
     )],
 
-    map_name => 'Darklands',
-    world_co => GF::Vec4->nit(55,40),
+    id       => $NULLSTR,
+    name     => $NULLSTR,
+
+    co       => [],
 
     grid     => [],
     limit    => [],
@@ -61,28 +63,9 @@ package RPG::Cell;
   }};
 
 # ---   *   ---   *   ---
+# GBL
 
-sub occuppier($self) {return $self->{occu}};
-
-sub is_occuppied($self) {
-  return defined $self->{occu};
-
-};
-
-sub is_free($self) {
-  return !defined $self->{occu};
-
-};
-
-# ---   *   ---   *   ---
-# setters
-
-sub occupy($self,$ok) {
-  return $self->{occu}=$ok
-
-};
-
-sub free($self) {$self->{occu}=undef};
+  my $World={};
 
 # ---   *   ---   *   ---
 # get cell neighbor
@@ -129,6 +112,71 @@ SKIP:
 };
 
 # ---   *   ---   *   ---
+# ^batch
+
+sub grid($class,$id,%O) {
+
+  # defaults
+  $O{name}   //= 'Darklands';
+
+  $O{height} //= 8;
+  $O{width}  //= 8;
+
+  $O{co}     //= [0,0,0,0];
+
+  # use existing
+  my $frame=$World->{$id};
+  goto SKIP if $frame;
+
+  # ^else make new
+  $frame=$class->new_frame(
+
+    id   => $id,
+    name => $O{name},
+
+    co   => GF::Vec4::nit(@{$O{co}}),
+
+  );
+
+  # save for later fetch
+  $World->{$id}=$frame;
+
+# ---   *   ---   *   ---
+# nit cells for this map
+
+  my $grid=$frame->{grid};
+  $frame->{limit}=[$O{width},$O{height}];
+
+  for my $y(0..$O{height}-1) {
+
+    my $row=$grid->[$y]=[];
+
+    for my $x(0..$O{width}-1) {
+      push @$row,$frame->cell($x,$y);
+
+    };
+
+  };
+
+# ---   *   ---   *   ---
+# nit rect for drawing
+
+  my ($x,$y)=($O{width}+3,$O{height}+2);
+
+  $frame->{rect}=GF::Rect->nit(
+    "${x}x${y}",
+    border=>1,
+
+  );
+
+# ---   *   ---   *   ---
+
+SKIP:
+  return $frame;
+
+};
+
+# ---   *   ---   *   ---
 # chk x,y within grid
 
 sub in_bounds($class,$frame,$x,$y) {
@@ -156,46 +204,11 @@ sub in_bounds($class,$frame,$x,$y) {
 };
 
 # ---   *   ---   *   ---
-
-sub grid($class,%O) {
-
-  # defaults
-  $O{height} //= 8;
-  $O{width}  //= 8;
-
-  my $frame = $class->new_frame();
-  my $grid  = $frame->{grid};
-
-  $frame->{limit}=[$O{width},$O{height}];
-
-  for my $y(0..$O{height}-1) {
-
-    my $row=$grid->[$y]=[];
-
-    for my $x(0..$O{width}-1) {
-      push @$row,$frame->cell($x,$y);
-
-    };
-
-  };
-
-  my ($x,$y)=($O{width}+3,$O{height}+2);
-
-  $frame->{rect}=GF::Rect->nit(
-    "${x}x${y}",
-    border=>1,
-
-  );
-
-  return $frame;
-
-};
-
-# ---   *   ---   *   ---
 # out draw commands for
 # Lycon ctlproc
 
 sub sput($class,$frame) {
+
   $frame->{rect}->textfit(
     [$frame->rows()],
 
@@ -230,6 +243,21 @@ sub rows($class,$frame) {
   };
 
   return @out;
+
+};
+
+# ---   *   ---   *   ---
+# get single tile is free
+
+sub is_nfree($self,$dx,$dy) {
+
+  my $dst = $self->neigh($dx,$dy);
+  my $out = ($dst && !$dst->{occu})
+    ? $dst
+    : undef
+    ;
+
+  return $out;
 
 };
 

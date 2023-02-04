@@ -27,13 +27,9 @@ package RPG::Actor;
   use parent 'St';
 
   use lib $ENV{'ARPATH'}.'/lib/';
-
-  use GF::Vec4;
-  use GF::Icon;
-
   use lib $ENV{'ARPATH'}.'/THRONE/';
 
-  use RPG::Cell;
+  use RPG::Co;
   use RPG::Social;
 
 # ---   *   ---   *   ---
@@ -52,89 +48,62 @@ package RPG::Actor;
 
     )],
 
-    name       => 'Circle of Four',
-
-    affiliates => [],
-    relations  => [],
-
-    goals      => [],
+    name=>'Circle of Four',
 
   }};
 
 # ---   *   ---   *   ---
 # constructor
 
-sub member($class,$frame,$at,$co,%O) {
+sub new($class,%O) {
 
   # defaults
-  $O{name}      //= 'Vagabond';
-  $O{sprite}    //= $GF::Icon::PAIN_S0;
-  $O{goals}     //= [];
-  $O{relations} //= [];
+  $O{name}   //= 'Vagabond';
+  $O{size}   //= '1x1';
+  $O{sprite} //= '$';
 
-  $O{traits}    //= undef;
+  $O{atid}   //= undef;
+
+  $O{co}     //= [0,0];
+  $O{social} //= {};
+
+  my $coar=RPG::Co->array(
+
+    $O{co},
+    $O{sprite},
+
+    $O{size},
+    $O{atid}
+
+  );
 
   # make new
   my $self=bless {
 
     name    => $O{name},
-
-    at      => $at,
-    co      => GF::Vec4->nit(@$co),
-
-    cell    => undef,
-    faction => $frame,
-
-    persona => RPG::Social->new(traits=>$O{traits}),
+    co      => $coar,
 
   },$class;
-
-  # spawn
-  $self->move(0,0);
-  push @{$frame->{affi}},$self;
 
   return $self;
 
 };
 
 # ---   *   ---   *   ---
+# selfex
 
-sub faction($class,%O) {
-  return $class->new_frame(%O);
+sub move($self,$dx,$dy) {
 
-};
+  my @out    = ();
+  my $co     = $self->{co};
 
-# ---   *   ---   *   ---
+  my ($x,$y) = $co->array_move($dx,$dy);
 
-sub move($self,$x,$y) {
+  push @out,{
+    proc => 'mvcur',
+    args => [0,20],
 
-  my @out=();
-
-  my $old=$self->{at}->cell(
-    $self->{co}->[0],
-    $self->{co}->[1],
-
-  );
-
-  my $cell=$old->neigh($x,$y);
-
-  if($cell && $cell->is_free()) {
-
-    $cell->occupy($self);
-
-    $self->{cell}=$cell;
-    $old->free() if $old ne $cell;
-
-    $self->{co}=$cell->{co};
-    ($x,$y)=@{$self->{co}};
-
-    push @out,{
-      proc => 'mvcur',
-      args => [0,20],
-
-      ct   => "$self->{name} moves to [$x,$y]",
-
-    };
+    ct   => "$self->{name} moves to [$x,$y]",
 
   };
 
@@ -155,12 +124,27 @@ sub social($self,$fn,@args) {
 # ---   *   ---   *   ---
 # test
 
-my $map  = RPG::Cell->grid();
-my $band = RPG::Actor->faction(name=>'Traveling knights');
+use utf8;
 
-my $boro = $band->member($map,[0,0],name=>'Boro');
+my $house=RPG::Actor->new(
 
-$boro->social(qw(situation encounter));
+  size   => '3x4',
+
+  sprite =>q[
+
+   : ^ ;
+   :/_\;
+   :|_|;
+   :|H|;
+
+  ],
+
+);
+
+$house->move(1,2);
+$house->move(0,-1);
+
+$house->{co}->{at}->prich();
 
 # ---   *   ---   *   ---
 1; # ret
