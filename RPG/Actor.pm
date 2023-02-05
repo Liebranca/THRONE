@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 # ---   *   ---   *   ---
-# RPG Actor
+# RPG ACTOR
 # A player uppon the stage
 #
 # LIBRE SOFTWARE
@@ -60,7 +60,10 @@ sub new($class,%O) {
   # defaults
   $O{name}   //= 'Vagabond';
   $O{size}   //= '1x1';
-  $O{sprite} //= '$';
+  $O{sprite} //= q[
+    :$;
+
+  ];
 
   $O{atid}   //= undef;
 
@@ -94,20 +97,81 @@ sub new($class,%O) {
 
 sub move($self,$dx,$dy) {
 
-  my @out    = ();
   my $co     = $self->{co};
-
   my ($x,$y) = $co->array_move($dx,$dy);
 
-  push @out,{
-    proc => 'mvcur',
-    args => [0,20],
+  my $new    = $self->{co}->origin();
 
-    ct   => "$self->{name} moves to [$x,$y]",
+  return !$new->{co}->equals([$x,$y,0,0]);
+
+};
+
+# ---   *   ---   *   ---
+# calculate path to destination
+
+sub move_to($self,$x,$y) {
+
+  my $cur=$self->{co}->origin();
+     $cur=$cur->{co};
+
+  return if $cur->equals([$x,$y,0,0]);
+
+  my @path=(!exists $self->{q[$cpath]})
+    ? $self->path_to($x,$y)
+    : @{$self->{q[$cpath]}}
+    ;
+
+  if(@path) {
+    my $point = shift @path;
+    my $delta = $point->{co}->minus($cur);
+    my $moved = $self->move(@{$delta}[0..1]);
+
+    @path     = $self->path_to($x,$y)
+    if ! $moved;
+
+    $self->{q[$cpath]}=\@path;
+
+  } else {
+    delete $self->{q[$cpath]};
 
   };
 
-  return @out;
+};
+
+# ---   *   ---   *   ---
+# do the dijks
+
+sub path_to($self,$x,$y) {
+
+  my $at   = $self->{co}->{at};
+
+  # TODO:
+  # throw if !$at->in_bounds($x,$y);
+
+  my $dst  = $at->cell($x,$y);
+  my $src  = $self->{co}->origin();
+
+  my @path = ($src);
+
+  while($dst ne $path[-1]) {
+
+    my $cur  = $path[-1];
+    my @walk = $cur->get_nwalk();
+
+    # get closest to dst out of
+    # walkable neighbors
+    my ($p,$i)=$dst->{co}->nearest(
+      map {$ARG->{co}} @walk
+
+    );
+
+    my $near=$walk[$i];
+    push @path,$near;
+
+  };
+
+  shift  @path;
+  return @path;
 
 };
 
@@ -120,31 +184,6 @@ sub social($self,$fn,@args) {
   say "On $ctx: $self->{name} chooses $act($feel)";
 
 };
-
-# ---   *   ---   *   ---
-# test
-
-use utf8;
-
-my $house=RPG::Actor->new(
-
-  size   => '3x4',
-
-  sprite =>q[
-
-   : ^ ;
-   :/_\;
-   :|_|;
-   :|H|;
-
-  ],
-
-);
-
-$house->move(1,2);
-$house->move(0,-1);
-
-$house->{co}->{at}->prich();
 
 # ---   *   ---   *   ---
 1; # ret

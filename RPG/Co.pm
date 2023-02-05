@@ -136,6 +136,9 @@ sub array(
       throw_small_sprite($sz)
       if ! @chars;
 
+      my $c=shift @chars;
+      next if $c eq q[ ];
+
       my $pos=[
         $base->[0]+$x,
         $base->[1]+$y,
@@ -147,7 +150,7 @@ sub array(
         pos    => $pos,
         id     => $atid,
 
-        sprite => shift @chars,
+        sprite => $c,
 
       );
 
@@ -209,35 +212,20 @@ sub throw_big_sprite($sz) {
 
 };
 
-
 # ---   *   ---   *   ---
-# change occupants
-
-sub swap($self,$new,$old) {
-
-  # set
-  $new->{occu}=$self;
-  $self->{cell}=$new;
-
-  # free
-  $old->{occu}=undef
-  if $old ne $new;
-
-};
-
-# ---   *   ---   *   ---
-# ^batch
+# batch change occupants
 
 sub array_swap($self,$new,$old) {
 
-  my $i=0;
+  my $at = $self->{at};
+  my $i  = 0;
+
   for my $co(@{$self->{ar}}) {
 
-    # set
-    $new->[$i]->{occu}=$co;
-    $co->{cell}=$new->[$i];
+    $co->{cell}=$at->set(
+      $new->[$i++],$co
 
-    $i++;
+    );
 
   };
 
@@ -250,10 +238,17 @@ sub array_swap($self,$new,$old) {
 
 sub move($self,$dx,$dy) {
 
-  my $old=$self->{cell};
+  my $old = $self->{cell};
+  my $at  = $self->{at};
 
   if(my $cell=$old->is_nfree($dx,$dy)) {
-    $self->swap($cell,$old);
+
+    $at->set($old,undef);
+
+    $self->{cell}=$at->set(
+      $cell,$self
+
+    );
 
   };
 
@@ -297,6 +292,14 @@ sub array_move($self,$dx,$dy) {
   };
 
   return @{$self->{cell}->[0]->{co}};
+
+};
+
+# ---   *   ---   *   ---
+# get [0,0] of block
+
+sub origin($self) {
+  return $self->{cell}->[0];
 
 };
 

@@ -22,7 +22,9 @@ package RPG::Cell;
   use Readonly;
 
   use lib $ENV{'ARPATH'}.'/lib/sys/';
+
   use Style;
+  use Arstd::Array;
 
   use lib $ENV{'ARPATH'}.'/lib/';
 
@@ -44,6 +46,9 @@ package RPG::Cell;
 
       in_bounds
 
+      set
+      get_walk
+
       sput
       rows
       prich
@@ -57,6 +62,7 @@ package RPG::Cell;
 
     grid     => [],
     limit    => [],
+    free     => [],
 
     rect     => undef,
 
@@ -144,15 +150,19 @@ sub grid($class,$id,%O) {
 # ---   *   ---   *   ---
 # nit cells for this map
 
-  my $grid=$frame->{grid};
+  my $grid = $frame->{grid};
+  my $free = $frame->{free};
+
   $frame->{limit}=[$O{width},$O{height}];
 
   for my $y(0..$O{height}-1) {
 
-    my $row=$grid->[$y]=[];
+    my $row  = $grid->[$y]=[];
+    my $frow = $free->[$y]=[];
 
     for my $x(0..$O{width}-1) {
       push @$row,$frame->cell($x,$y);
+      push @$frow,1;
 
     };
 
@@ -173,6 +183,79 @@ sub grid($class,$id,%O) {
 
 SKIP:
   return $frame;
+
+};
+
+# ---   *   ---   *   ---
+# occupy cell with object
+
+sub set($class,$frame,$cell,$o) {
+
+  my ($x,$y)        = @{$cell->{co}};
+  my $free          = $frame->{free};
+
+  $cell->{occu}     = $o;
+  $free->[$y]->[$x] = int(!defined $o);
+
+  return $cell;
+
+};
+
+# ---   *   ---   *   ---
+# get list of walkable cells
+
+sub get_walk($class,$frame,@comp) {
+
+  my @out    = ();
+  my ($x,$y) = (0,0);
+
+  my $grid   = $frame->{grid};
+  my $free   = $frame->{free};
+
+  for my $row(@$free) {
+
+    for my $avail(@$row) {
+
+      next if ! $avail;
+
+      my $cell=$grid->[$y]->[$x++];
+
+      my @dist=map {
+        $cell->{co}->dist($ARG)
+
+      } @comp;
+
+      push @out,[$cell,@dist];
+
+    };
+
+    $y++;
+    $x^=$x;
+
+  };
+
+  return @out;
+
+};
+
+# ---   *   ---   *   ---
+# ^walkable out of neighbors
+
+sub get_nwalk($self) {
+
+  my @out=();
+
+  for my $y(-1,0,1) {
+  for my $x(-1,0,1) {
+
+    next if (!$y && !$x) || ($x && $y);
+
+    my $n=$self->neigh($x,$y);
+    push @out,$n if $n && !defined $n->{occu};
+
+  }};
+
+  return @out;
 
 };
 
