@@ -13,6 +13,8 @@ package Tests::Sim;
   use warnings;
 
   use Time::HiRes qw(usleep);
+
+  use Readonly;
   use English qw(-no_match_vars);
 
   use lib $ENV{'ARPATH'}.'/lib/sys/';
@@ -29,36 +31,119 @@ package Tests::Sim;
 # ---   *   ---   *   ---
 # nits
 
-my $church=RPG::Static->new(
+my $west=RPG::Cell->new(
+
+  'TEST-0000',
+
+  name => 'Western Test',
+  co   => [0,0],
+
+);
+
+my $east=RPG::Cell->new(
+
+  'TEST-0001',
+
+  name => 'Eastern Test',
+  co   => [1,0],
+
+);
+
+# ---   *   ---   *   ---
+
+my $tree=RPG::Static->new(
+
+  name   => 'Tree',
 
   size   => '3x4',
-  co     => [1,1],
+  pos    => [1,1],
+
+  cell   => $east,
 
   sprite => q[
 
    : ^ ;
-   :/_\;
-   :|_|;
-   :|H|;
+   :/|\;
+   :/|\;
+   : | ;
 
   ],
 
 );
 
-my $char=RPG::Actor->new();
+# ---   *   ---   *   ---
+# behaviours
+
+  Readonly our $BE_DOOR=>{
+
+    on_touch => sub ($self,$other) {
+      $other->{space}->array_door_to($east,[0,7]);
+
+    },
+
+  };
 
 # ---   *   ---   *   ---
 
-print "\e[2J\e[0H";
+my $char=RPG::Actor->new(
 
-my $panic=10;
+  cell   => $west,
+  pos    => [1,0],
+
+);
+
+my $door=RPG::Static->new(
+
+  cell   => $west,
+  pos    => [7,0],
+
+  sprite => q[
+
+    :D;
+
+  ],
+
+  behave => $BE_DOOR,
+
+);
+
+# ---   *   ---   *   ---
+
+# TODO:
+#
+# ~ char goal eq get wood
+# ~ \-->looks for wood source
+# ~ .  \-->gets nearest map with trees
+# ~ .  \-->moves to map
+#
+# ~ \-->approaches nearest tree
+# ~ \-->chops
+#
+# ~ \-->char goal eq store wood
+# ~ .  \-->looks for storage
+# ~ .  .  \-->gets nearest map with safe
+# ~ .  .  \-->moves to map
+#
+# ~ \-->rept
+
+print "\e[2J\e[0H";
+my $dst=$door;
+
+my $panic=20;
 while($panic--) {
+
+  my $cell=$char->{space}->{cell};
 
   print "\e[0H";
 
-  $church->{co}->{at}->prich();
+  $cell->prich();
 
-  $char->move_to(2,5);
+  if($dst && ! $char->walk_to($dst)) {
+    $char->touch($dst);
+    $dst=undef;
+
+  };
+
 
   usleep(100000);
 

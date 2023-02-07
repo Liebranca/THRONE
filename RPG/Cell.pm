@@ -34,6 +34,12 @@ package RPG::Cell;
   use parent 'St';
 
 # ---   *   ---   *   ---
+# info
+
+  our $VERSION = v0.00.5;#b
+  our $AUTHOR  = 'IBN-3DILA';
+
+# ---   *   ---   *   ---
 # ROM
 
   sub Frame_Vars($class) {return {
@@ -41,8 +47,10 @@ package RPG::Cell;
 
     -autoload=>[qw(
 
-      grid
-      cell
+      tile
+
+      nit_tiles
+      nit_rect
 
       in_bounds
 
@@ -78,24 +86,22 @@ package RPG::Cell;
 
 sub neigh($self,$dx,$dy) {
 
-  my $frame  = $self->{frame};
-  my $grid   = $frame->{grid};
-
+  my $frame  = $self->{cell};
   my ($x,$y) = @{$self->{co}};
 
-  return $frame->cell($x+$dx,$y+$dy);
+  return $frame->tile($x+$dx,$y+$dy);
 
 };
 
 # ---   *   ---   *   ---
-# single cell instance
+# single tile instance
 
-sub cell($class,$frame,$x,$y) {
+sub tile($class,$frame,$x,$y) {
 
   my $self=undef;
   my $grid=$frame->{grid};
 
-  goto SKIP if !$frame->in_bounds($x,$y);
+  goto SKIP if ! $frame->in_bounds($x,$y);
 
   $self=$grid->[$y]->[$x];
 
@@ -103,10 +109,10 @@ sub cell($class,$frame,$x,$y) {
 
     $self=bless {
 
-      co     => GF::Vec4->nit($x,$y),
-      occu   => undef,
+      co   => GF::Vec4->nit($x,$y),
+      occu => undef,
 
-      frame  => $frame,
+      cell => $frame,
 
     },$class;
 
@@ -120,58 +126,76 @@ SKIP:
 # ---   *   ---   *   ---
 # ^batch
 
-sub grid($class,$id,%O) {
+sub new($class,$id,%O) {
 
   # defaults
   $O{name}   //= 'Darklands';
 
   $O{height} //= 8;
   $O{width}  //= 8;
-
   $O{co}     //= [0,0,0,0];
 
-  # use existing
-  my $frame=$World->{$id};
-  goto SKIP if $frame;
-
-  # ^else make new
-  $frame=$class->new_frame(
+  # make new
+  my $frame=$class->new_frame(
 
     id   => $id,
     name => $O{name},
 
-    co   => GF::Vec4::nit(@{$O{co}}),
+    co   => GF::Vec4->nit(@{$O{co}}),
 
   );
+
+  $frame->nit_tiles($O{width},$O{height});
+  $frame->nit_rect();
 
   # save for later fetch
   $World->{$id}=$frame;
 
+  return $frame;
+
+};
+
 # ---   *   ---   *   ---
-# nit cells for this map
+# initializes tiles of a cell
+
+sub nit_tiles(
+
+  # implicit
+  $class,
+  $frame,
+
+  # actual
+  $sz_x,
+  $sz_y
+
+) {
 
   my $grid = $frame->{grid};
   my $free = $frame->{free};
 
-  $frame->{limit}=[$O{width},$O{height}];
+  $frame->{limit}=[$sz_x,$sz_y];
 
-  for my $y(0..$O{height}-1) {
+  for my $y(0..$sz_y-1) {
 
     my $row  = $grid->[$y]=[];
     my $frow = $free->[$y]=[];
 
-    for my $x(0..$O{width}-1) {
-      push @$row,$frame->cell($x,$y);
+    for my $x(0..$sz_x-1) {
+      push @$row,$frame->tile($x,$y);
       push @$frow,1;
 
     };
 
   };
 
-# ---   *   ---   *   ---
-# nit rect for drawing
+};
 
-  my ($x,$y)=($O{width}+3,$O{height}+2);
+# ---   *   ---   *   ---
+# ^rect for drawing
+
+sub nit_rect($class,$frame) {
+
+  my ($x,$y)=@{$frame->{limit}};
 
   $frame->{rect}=GF::Rect->nit(
     "${x}x${y}",
@@ -179,10 +203,41 @@ sub grid($class,$id,%O) {
 
   );
 
-# ---   *   ---   *   ---
+};
 
-SKIP:
+# ---   *   ---   *   ---
+# recover instances
+
+sub fetch($class,$id,%O) {
+
+  my $frame=(!exists $World->{$id})
+    ? $World->{$id}
+    : $class->new($id,%O)
+    ;
+
   return $frame;
+
+};
+
+# ---   *   ---   *   ---
+# just so that RPG::Space->new
+# can accept refs and ids
+
+sub ref_or_id($class,$at) {
+
+  my $out=undef;
+
+  # 'at' is instance
+  if(0<length ref $at) {
+    $out=$at;
+
+  # ^'at' is an id
+  } else {
+    $out=$class->fetch($at);
+
+  };
+
+  return $out;
 
 };
 
@@ -209,23 +264,28 @@ sub get_walk($class,$frame,@comp) {
   my @out    = ();
   my ($x,$y) = (0,0);
 
-  my $grid   = $frame->{grid};
   my $free   = $frame->{free};
 
   for my $row(@$free) {
 
     for my $avail(@$row) {
 
-      next if ! $avail;
+      # skip occupied
+      if(! $avail) {
+        $x++;
+        next;
 
-      my $cell=$grid->[$y]->[$x++];
+      };
 
+      my $tile=$frame->tile($x++,$y);
+
+      # get distance for each point
       my @dist=map {
-        $cell->{co}->dist($ARG)
+        $tile->{co}->dist($ARG)
 
       } @comp;
 
-      push @out,[$cell,@dist];
+      push @out,[$tile,@dist];
 
     };
 
@@ -251,7 +311,7 @@ sub get_nwalk($self) {
     next if (!$y && !$x) || ($x && $y);
 
     my $n=$self->neigh($x,$y);
-    push @out,$n if $n && !defined $n->{occu};
+    push @out,$n if $n && ! $n->{occu};
 
   }};
 

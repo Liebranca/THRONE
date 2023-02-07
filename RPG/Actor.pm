@@ -24,18 +24,20 @@ package RPG::Actor;
   use lib $ENV{'ARPATH'}.'/lib/sys/';
 
   use Style;
-  use parent 'St';
+  use Chk;
 
   use lib $ENV{'ARPATH'}.'/lib/';
   use lib $ENV{'ARPATH'}.'/THRONE/';
 
-  use RPG::Co;
+  use RPG::Space;
   use RPG::Social;
+
+  use parent 'St';
 
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.2;#b
+  our $VERSION = v0.00.3;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -59,24 +61,17 @@ sub new($class,%O) {
 
   # defaults
   $O{name}   //= 'Vagabond';
-  $O{size}   //= '1x1';
-  $O{sprite} //= q[
-    :$;
-
-  ];
-
-  $O{atid}   //= undef;
-
-  $O{co}     //= [0,0];
   $O{social} //= {};
 
-  my $coar=RPG::Co->array(
+  my $space=RPG::Space->array(
 
-    $O{co},
-    $O{sprite},
+    pos    => $O{pos},
+    sprite => $O{sprite},
 
-    $O{size},
-    $O{atid}
+    size   => $O{size},
+    cell   => $O{cell},
+
+    behave => $O{behave},
 
   );
 
@@ -84,7 +79,7 @@ sub new($class,%O) {
   my $self=bless {
 
     name    => $O{name},
-    co      => $coar,
+    space   => $space,
 
   },$class;
 
@@ -93,48 +88,136 @@ sub new($class,%O) {
 };
 
 # ---   *   ---   *   ---
-# selfex
+# change position, absolute
 
-sub move($self,$dx,$dy) {
+sub teleport($self,$nx,$ny) {
 
-  my $co     = $self->{co};
-  my ($x,$y) = $co->array_move($dx,$dy);
+  my $space  = $self->{space};
+  my ($x,$y) = $space->array_teleport($nx,$ny);
 
-  my $new    = $self->{co}->origin();
+  my $new    = $self->{space}->origin();
 
-  return !$new->{co}->equals([$x,$y,0,0]);
+  return ! $new->{co}->equals([$x,$y,0,0]);
 
 };
 
 # ---   *   ---   *   ---
-# calculate path to destination
+# ^relative to current
 
-sub move_to($self,$x,$y) {
+sub walk($self,$dx,$dy) {
 
-  my $cur=$self->{co}->origin();
-     $cur=$cur->{co};
+  my $space  = $self->{space};
+  my ($x,$y) = $space->array_walk($dx,$dy);
 
-  return if $cur->equals([$x,$y,0,0]);
+  my $new    = $self->{space}->origin();
 
-  my @path=(!exists $self->{q[$cpath]})
-    ? $self->path_to($x,$y)
-    : @{$self->{q[$cpath]}}
-    ;
+  return ! $new->{co}->equals([$x,$y,0,0]);
 
-  if(@path) {
-    my $point = shift @path;
-    my $delta = $point->{co}->minus($cur);
-    my $moved = $self->move(@{$delta}[0..1]);
+};
 
-    @path     = $self->path_to($x,$y)
-    if ! $moved;
+# ---   *   ---   *   ---
+# create and follow path to destination
 
-    $self->{q[$cpath]}=\@path;
+sub walk_to($self,$dst) {
 
-  } else {
-    delete $self->{q[$cpath]};
+  my $out    = 0;
+  my ($x,$y) = $self->point_or_object($dst);
+
+  if(! $self->arrived($x,$y)) {
+
+    if(! $self->follow_path()) {
+      $out=1;
+
+    } else {
+      $out|=2;
+
+    };
 
   };
+
+  return $out;
+
+};
+
+# ---   *   ---   *   ---
+# get nearest neighboring tile
+
+sub near_nof($self,$other) {
+
+  my $cur  = $self->{space}->origin();
+  my @walk = $other->{space}->array_nof();
+
+  my ($p,$i)=$cur->{co}->nearest(
+    map {$ARG->{co}} @walk
+
+  );
+
+  return @$p;
+
+};
+
+# ---   *   ---   *   ---
+# solve movement target
+
+sub point_or_object($self,$other) {
+
+  my @out   = ();
+  my $path  = $self->{q[$cpath]};
+
+  my $isref = 0<length ref $other;
+
+  if($isref && ! $path) {
+    @out=$self->near_nof($other);
+
+  } elsif($path && @$path) {
+    @out=@{$path->[-1]->{co}};
+
+  } elsif(!$isref) {
+    @out=@$other;
+
+  };
+
+  return @out;
+
+};
+
+# ---   *   ---   *   ---
+# go to next point in
+
+sub follow_path($self) {
+
+  my $path  = $self->{q[$cpath]};
+  my $point = shift @$path;
+
+  my $cur   = $self->{space}->origin();
+  my $delta = $point->{co}->minus($cur->{co});
+
+  return $self->walk(@{$delta}[0..1]);
+
+};
+
+# ---   *   ---   *   ---
+# at end/start of path
+
+sub arrived($self,$x,$y) {
+
+  my $out  = 0;
+
+  my $path = $self->{q[$cpath]};
+  my $cur  = $self->{space}->origin();
+
+  # last point popped
+  if($path && ! @$path) {
+    delete $self->{q[$cpath]};
+    $out=1;
+
+  # dst reached
+  } else {
+    $self->path_to($x,$y) if ! $path;
+
+  };
+
+  return $out;
 
 };
 
@@ -143,13 +226,13 @@ sub move_to($self,$x,$y) {
 
 sub path_to($self,$x,$y) {
 
-  my $at   = $self->{co}->{at};
+  my $cell = $self->{space}->{cell};
 
   # TODO:
-  # throw if !$at->in_bounds($x,$y);
+  # throw if ! $cell->in_bounds($x,$y);
 
-  my $dst  = $at->cell($x,$y);
-  my $src  = $self->{co}->origin();
+  my $dst  = $cell->tile($x,$y);
+  my $src  = $self->{space}->origin();
 
   my @path = ($src);
 
@@ -170,6 +253,8 @@ sub path_to($self,$x,$y) {
 
   };
 
+  $self->{q[$cpath]}=\@path;
+
   shift  @path;
   return @path;
 
@@ -182,6 +267,18 @@ sub social($self,$fn,@args) {
   my ($ctx,$act,$feel)=$self->{persona}->$fn(@args);
 
   say "On $ctx: $self->{name} chooses $act($feel)";
+
+};
+
+# ---   *   ---   *   ---
+# interaction shorthand
+
+sub touch($self,$other,@args) {
+
+  return $other->{space}->iract(
+    'on_touch',$self,@args
+
+  );
 
 };
 

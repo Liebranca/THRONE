@@ -29,12 +29,12 @@ package RPG::Static;
   use lib $ENV{'ARPATH'}.'/lib/';
   use lib $ENV{'ARPATH'}.'/THRONE/';
 
-  use RPG::Co;
+  use RPG::Space;
 
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.2;#b
+  our $VERSION = v0.00.3;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -55,25 +55,17 @@ package RPG::Static;
 sub new($class,%O) {
 
   # defaults
-  $O{name}   //= 'Barrel';
-  $O{size}   //= '1x1';
+  $O{name}//='Barrel';
 
-  $O{sprite} //= q[
-    :U;
+  my $space=RPG::Space->array(
 
-  ];
+    pos    => $O{pos},
+    sprite => $O{sprite},
 
-  $O{atid}   //= undef;
+    size   => $O{size},
+    cell   => $O{cell},
 
-  $O{co}     //= [0,0];
-
-  my $coar=RPG::Co->array(
-
-    $O{co},
-    $O{sprite},
-
-    $O{size},
-    $O{atid}
+    behave => $O{behave},
 
   );
 
@@ -81,7 +73,7 @@ sub new($class,%O) {
   my $self=bless {
 
     name    => $O{name},
-    co      => $coar,
+    space   => $space,
 
   },$class;
 
