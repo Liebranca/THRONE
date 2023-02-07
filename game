@@ -59,6 +59,7 @@ sub on_refresh() {
 };
 
 # ---   *   ---   *   ---
+# movement keys
 
 sub mvlft() {
   drawcmd($Char->move(-1,0));
