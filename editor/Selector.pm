@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 # ---   *   ---   *   ---
-# EDITOR
-# For doodling bout
+# EDITOR SELECTOR
+# Picks a char from table
 #
 # LIBRE SOFTWARE
 # Licensed under GNU GPL3
@@ -13,7 +13,7 @@
 # ---   *   ---   *   ---
 # deps
 
-package main;
+package Selector;
 
   use v5.36.0;
   use strict;
@@ -65,6 +65,7 @@ package main;
 # GBL
 
   my $Cache={
+
     terminate => 0,
     refresh   => 0,
 
@@ -75,9 +76,31 @@ package main;
   };
 
 # ---   *   ---   *   ---
-# makes selection panel
 
-sub build_table() {
+sub get_highlighted() {
+
+  my ($x,$y)   = @{$Cache->{table_pos}};
+  my ($dx,$dy) = @{$Cache->{table_sel}};
+
+  my $sz       = $Cache->{table_sz};
+  my $i        = $dx+($dy*$sz);
+
+  my $limit    = @$CHARS;
+  my $c        = $CHARS->[$i];
+
+  if($i>=$limit) {
+    $c=q[ ];
+
+  };
+
+  return $c;
+
+};
+
+# ---   *   ---   *   ---
+# draw command for selection panel
+
+sub draw_table() {
 
   my @out    = ();
   my @ar     = @$CHARS;
@@ -124,21 +147,12 @@ sub build_table() {
 # ---   *   ---   *   ---
 # ^ivs color on selected char
 
-sub get_highlighted() {
+sub draw_highlighted() {
 
   my ($x,$y)   = @{$Cache->{table_pos}};
   my ($dx,$dy) = @{$Cache->{table_sel}};
 
-  my $sz       = $Cache->{table_sz};
-  my $i        = $dx+($dy*$sz);
-
-  my $limit    = @$CHARS;
-  my $c        = $CHARS->[$i];
-
-  if($i>=$limit) {
-    $c=q[ ];
-
-  };
+  my $c        = get_highlighted();
 
   my $pos={
     proc=>'mvcur',
@@ -164,6 +178,31 @@ sub get_highlighted() {
     {proc => 'bnw'}
 
   );
+
+};
+
+# ---   *   ---   *   ---
+# keeps this package in control
+
+sub rept() {
+  my $Q=get_module_queue();
+  $Q->add(\&rept) if ! $Cache->{terminate};
+
+  on_refresh();
+
+};
+
+# ---   *   ---   *   ---
+# ^triggers control transfer
+
+sub ctl_take() {
+
+  $Cache->{terminate}=0;
+
+  my $Q=get_module_queue();
+  $Q->add(\&rept);
+
+  Lycon::Loop::transfer();
 
 };
 
@@ -195,6 +234,7 @@ sub mvfwd() {
 };
 
 # ---   *   ---   *   ---
+# keys used by module
 
 Lycon::Ctl::register_events(
 
@@ -202,8 +242,6 @@ Lycon::Ctl::register_events(
     $Cache->{terminate}=1;
 
   }],
-
-  space=>[\&sim_step,0,0],
 
   w=>[\&mvfwd,\&mvfwd,0],
   a=>[\&mvlft,\&mvlft,0],
@@ -219,39 +257,12 @@ sub on_refresh() {
 
   drawcmd(
 
-    build_table(),
-    get_highlighted(),
+    draw_table(),
+    draw_highlighted(),
 
   );
 
 };
-
-# ---   *   ---   *   ---
-# the bit
-
-my $main=defmain(
-
-  quit  => sub () {
-    return $Cache->{terminate};
-
-  },
-
-  logic => {proc=>\&on_refresh},
-
-);
-
-# ---   *   ---   *   ---
-# ^exec
-
-$main->(
-
-  panic        => 0,
-
-  clear_screen => 1,
-  hide_cursor  => 1,
-  reset_cursor => 1,
-
-);
 
 # ---   *   ---   *   ---
 1; # ret

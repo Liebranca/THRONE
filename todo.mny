@@ -3,4 +3,11 @@
 *>Utils
 
 ~ Sprite/map editor
-~ \--> by-RPG::Co editing of properties
+
+~ \--> mode-swapping
+
+~ .  \--> 0: draw
+~ .  .  \--> inserting chars onto canvas
+
+~ .  \--> 1: props
+~ .  .  \--> by-ice RPG::Space editing of properties

@@ -40,7 +40,7 @@ package RPG::Dice;
 
   Readonly our $IRE=>qr{
 
-    (?<num> \d+)
+    (?<num> \d+)?
     [dD]
 
     (?<sides> \d+)
@@ -102,7 +102,7 @@ sub new($class,$wrath) {
 
     id    => $wrath,
 
-    num   => $+{num},
+    num   => ($+{num}) ? $+{num} : 1,
     sides => $+{sides},
 
   },$class;
