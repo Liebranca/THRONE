@@ -59,13 +59,8 @@ BEGIN {
 
   sub Frame_Vars($class) { return {
 
-#    -creg   => undef,
-#    -cclan  => 'non',
-#    -cproc  => undef,
-
     %{Grammar->Frame_Vars()},
-
-#    -passes => ['_ctx','_opz','_run'],
+    -passes => ['_ctx','_opz','_run'],
 
   }};
 
@@ -131,7 +126,7 @@ BEGIN {
   rule('~<nlist-item>');
   rule('$<attr> list-item nlist-item');
 
-  rule('+<attr-list> &list_flatten attr');
+  rule('+<attr-list> attr');
 
 # ---   *   ---   *   ---
 # ^post-parse
@@ -153,8 +148,8 @@ sub attr($self,$branch) {
 
 sub attr_tok($self,$dst,$vref) {
 
-  state $re=$REGEX->{q[attr-token]};
-  my $anchor=$dst;
+  state $re     = $REGEX->{q[attr-token]};
+  my    $anchor = $dst;
 
   # tokenize line
   while($$vref=~ s[$re][]) {
@@ -171,8 +166,6 @@ sub attr_tok($self,$dst,$vref) {
 
       $self->attr_tok($branch,\$tok);
 
-      next;
-
     # common token
     } else {
 
@@ -180,6 +173,7 @@ sub attr_tok($self,$dst,$vref) {
       my $branch=$anchor->init($tok);
 
       if($tok=~ m{\[}) {
+
         $anchor=$branch;
         $anchor->{value}='$[]';
 
@@ -191,7 +185,21 @@ sub attr_tok($self,$dst,$vref) {
 
     };
 
+    say $tok;
+
   };
+
+};
+
+# ---   *   ---   *   ---
+# context pass
+
+sub attr_ctx($self,$branch) {
+
+  my $st=$self->attr_rd($branch);
+
+  $branch->clear();
+  $branch->{value}=$st;
 
 };
 
@@ -208,6 +216,7 @@ sub attr_rd($self,$branch) {
     argv => [],
 
     ltok => $NULLSTR,
+    tree => [],
 
   };
 
@@ -219,12 +228,15 @@ sub attr_rd($self,$branch) {
     my @lv  = @{$leaf->{leaves}};
 
     # recurse
-    $self->attr_rd($leaf) if @lv;
+    push @{$st->{tree}},
+      $self->attr_rd($leaf)
+
+    if @lv;
 
     # handle iv-call
     if($tok eq '->*') {
       push @{$st->{argv}},$st->{call};
-      $st->{call}=$st->{ltok};
+      $st->{call}=$NULLSTR;
 
     } elsif(! $st->{call}) {
       $st->{call}=$tok;
@@ -237,6 +249,8 @@ sub attr_rd($self,$branch) {
     $st->{ltok}=$tok;
 
   };
+
+  return $st;
 
 };
 
@@ -268,8 +282,31 @@ sub attr_name($self,$branch) {
 };
 
 # ---   *   ---   *   ---
+# combo
 
-  rule('$<spell-def> attr-name attr-list');
+  rule(q[
+
+    $<spell-def>
+    &spell_def
+
+    attr-name attr-list
+
+  ]);
+
+# ---   *   ---   *   ---
+# ^post-parse
+
+sub spell_def($self,$branch) {
+
+  my @lv     = @{$branch->{leaves}};
+  my ($name) = $branch->pluck($lv[0]);
+
+  $branch->{value}=$name->{value};
+  $lv[1]->flatten_branch();
+
+};
+
+# ---   *   ---   *   ---
 
   rule('~<term>');
   rule('~<name>');
@@ -306,16 +343,41 @@ sub spell_dice($self,$branch) {
 };
 
 # ---   *   ---   *   ---
+# combo
 
   rule(q[
 
     $<spell-decl>
+    &spell_decl
 
     name
     spell-dice
     degree
 
   ]);
+
+# ---   *   ---   *   ---
+# ^post-parse
+
+sub spell_decl_ctx($self,$branch) {
+
+  # get nodes up to next hierarchical
+  my @out=$branch->{parent}->match_until(
+    $branch,qr{^spell-decl$}
+
+  );
+
+  # ^all remaining on fail
+  @out=$branch->{parent}->all_from(
+    $branch
+
+  ) if ! @out;
+
+  $branch->pushlv(@out);
+
+};
+
+# ---   *   ---   *   ---
 
   rule(q[
 
@@ -339,44 +401,50 @@ sub spell_dice($self,$branch) {
 
   my $prog = q[
 
-damage () **
+ajira () *^"
 
-  args:
-    * self
-    * d
-    ;
-
-  apply:
-    * dec self->HP [
-        [d]
-      / [self ->* resist]
-
-    ];
-
-attack (d4) '
-
-  args:
-    * caster
-    * target
-    * d
+  spells:
+    * thunder
+    * plasma-cannon
     ;
 
 ];
 
-#  on touch:
-#
-#    * damage target [
-#
-#        [d/2]
-#
-#      + [caster ->* weapon]
-#      + [caster ->* tactic]
-#
-#    ];
+# ---   *   ---   *   ---
 
-  my $ice  = Grammar::Marauder->parse("$prog");
+#  props:
+#    * character
+#    * human female
+#    * portrait $24
+#    ;
+#
+#  effects:
+#    * ignition-mastery
+#    * farsight
+#    * surge
+#    * madrias-curse
+#    ;
+#
+#  weapon:
+#    * martyrdom
+#    ;
+#
+#  apparel:
+#    * leather-gloves
+#    * black-hood
+#    * cotton-cape
+#    * hardy-chains
+#    * snow-shoes
+#    ;
 
-  $ice->{p3}->prich();
+# ---   *   ---   *   ---
+
+  my $ice  = Grammar::Marauder->parse(
+    "$prog",-r=>2
+
+  );
+
+#  $ice->{p3}->prich();
 
 # ---   *   ---   *   ---
 1; # ret
