@@ -47,7 +47,7 @@ package main;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.2;#b
+  our $VERSION = v0.00.3;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -70,6 +70,14 @@ sub switch_ctx() {
 };
 
 # ---   *   ---   *   ---
+# put char
+
+sub paint() {
+  say "\e[64H$Selector::Cache->{cchar}\r";
+
+};
+
+# ---   *   ---   *   ---
 # keys used by module
 
 Lycon::Ctl::register_events(
@@ -79,14 +87,57 @@ Lycon::Ctl::register_events(
 
   }],
 
+  ret=>[\&paint,\&paint,0],
   tab=>[\&switch_ctx,0,0],
 
 );
 
 # ---   *   ---   *   ---
+# puts selected on screen
+
+sub draw_cchar() {
+
+  my $pos={
+    proc=>'mvcur',
+    args=>[0x00,0xFF],
+
+  };
+
+  my $color={
+    proc => 'color',
+    args => [0x03],
+
+    ct   => 'SEL [' .
+      $Selector::Cache->{cchar} .
+
+    ']',
+
+  };
+
+  return (
+
+    # move and color on
+    $pos,
+    $color,
+
+    # ^color off
+    {proc => 'bnw'}
+
+  );
+
+};
+
+# ---   *   ---   *   ---
 # state proc
 
-sub each_frame() {};
+sub each_frame() {
+
+  drawcmd(
+    draw_cchar(),
+
+  );
+
+};
 
 # ---   *   ---   *   ---
 # the bit

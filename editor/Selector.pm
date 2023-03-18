@@ -29,6 +29,8 @@ package Selector;
 
   use lib $ENV{'ARPATH'}.'/lib/';
 
+  use Lycon;
+  use Lycon::Kbd;
   use Lycon::Ctl;
   use Lycon::Loop;
 
@@ -39,7 +41,7 @@ package Selector;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.1;#b
+  our $VERSION = v0.00.2;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -64,7 +66,7 @@ package Selector;
 # ---   *   ---   *   ---
 # GBL
 
-  my $Cache={
+  our $Cache={
 
     terminate => 0,
     refresh   => 0,
@@ -72,6 +74,8 @@ package Selector;
     table_sz  => 16,
     table_pos => [0,0],
     table_sel => [0,0],
+
+    cchar     => q[ ],
 
   };
 
@@ -92,6 +96,8 @@ sub get_highlighted() {
     $c=q[ ];
 
   };
+
+  $Cache->{cchar}=$c;
 
   return $c;
 
@@ -198,7 +204,6 @@ sub rept() {
 sub ctl_take() {
 
   $Cache->{terminate}=0;
-
   my $Q=get_module_queue();
   $Q->add(\&rept);
 
@@ -238,10 +243,10 @@ sub mvfwd() {
 
 Lycon::Ctl::register_events(
 
-  escape=>[0,0,sub {
+  tab=>[sub {
     $Cache->{terminate}=1;
 
-  }],
+  },0,0],
 
   w=>[\&mvfwd,\&mvfwd,0],
   a=>[\&mvlft,\&mvlft,0],
