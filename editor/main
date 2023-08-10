@@ -33,6 +33,7 @@ package main;
 
   use Lycon::Ctl;
   use Lycon::Loop;
+  use Lycon::Gen;
 
   use GF::Mode::ANSI;
 
@@ -47,7 +48,7 @@ package main;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.3;#b
+  our $VERSION = v0.00.5;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -55,17 +56,50 @@ package main;
 
   my $Cache={
 
-    terminate => 0,
-    refresh   => 0,
-    cmode     => 0,
+    terminate  => 0,
+    refresh    => 0,
+    cmode      => 0,
+
+    canvas     => {
+
+      sel   => GF::Vec4->nit(0,0),
+      pos   => GF::Vec4->nit(16,9),
+
+      dim   => [[0,16],[0,16]],
+
+      buf   => [],
+      cchar => q[ ],
+
+    },
 
   };
+
+  $Cache->{canvas}->{buf}=[(q[ ]) x (
+    $Cache->{canvas}->{dim}->[0]->[1]
+  * $Cache->{canvas}->{dim}->[1]->[1]
+
+  )];
 
 # ---   *   ---   *   ---
 # triggers control switch
 
 sub switch_ctx() {
-  Selector::ctl_take();
+
+  drawcmd(
+    Selector::draw_canvas($Cache->{canvas})
+
+  );
+
+  $Cache->{cmode}=1;
+  Selector::ctl_take(\&on_refresh);
+
+};
+
+# ---   *   ---   *   ---
+# ^restores
+
+sub ctl_take() {
+  $Cache->{cmode}=0;
 
 };
 
@@ -73,7 +107,20 @@ sub switch_ctx() {
 # put char
 
 sub paint() {
-  say "\e[64H$Selector::Cache->{cchar}\r";
+
+  my $i=Selector::get_curpos(
+    $Cache->{canvas}
+
+  );
+
+  my $beg  = Selector::get_color();
+     $beg  = graphics()->color($beg);
+
+  my $char = $Selector::Cache->{table}->{cchar};
+
+  my $end  = graphics()->bnw();
+
+  $Cache->{canvas}->{buf}->[$i]="$beg$char$end";
 
 };
 
@@ -82,13 +129,29 @@ sub paint() {
 
 Lycon::Ctl::register_events(
 
+  # exit to tty
   escape=>[0,0,sub {
     $Cache->{terminate}=1;
 
   }],
 
-  ret=>[\&paint,\&paint,0],
+  # get char selector
   tab=>[\&switch_ctx,0,0],
+
+  # put char at cursor
+  ret=>[\&paint,\&paint,0],
+
+  # movement keys
+  Lycon::Gen::wasd(
+
+    $Cache->{canvas}->{sel},
+    $Cache->{canvas}->{dim},
+
+    tap=>1,
+    hel=>1,
+    rel=>0,
+
+  ),
 
 );
 
@@ -97,31 +160,73 @@ Lycon::Ctl::register_events(
 
 sub draw_cchar() {
 
+  return {
+    proc => 'color',
+    args => [0x03],
+
+    ct   => 'SEL [' .
+      $Selector::Cache->{table}->{cchar} .
+
+    ']',
+
+  };
+
+};
+
+# ---   *   ---   *   ---
+# ^shows selected color
+
+sub draw_ccolor() {
+
+  my $color=Selector::get_color();
+
+  return {
+    ct   => " | COLOR ",
+
+  },{
+
+    proc => 'color',
+    args => [$color],
+
+    ct   => (sprintf "%02X",$color),
+
+  };
+
+};
+
+# ---   *   ---   *   ---
+# draws bar at screen bottom
+
+sub draw_ctlbar() {
+
   my $pos={
     proc=>'mvcur',
     args=>[0x00,0xFF],
 
   };
 
-  my $color={
-    proc => 'color',
-    args => [0x03],
-
-    ct   => 'SEL [' .
-      $Selector::Cache->{cchar} .
-
-    ']',
-
-  };
-
   return (
 
-    # move and color on
     $pos,
-    $color,
+
+    draw_cchar(),
+    draw_ccolor(),
 
     # ^color off
-    {proc => 'bnw'}
+    {proc => 'bnw'},
+
+  );
+
+};
+
+# ---   *   ---   *   ---
+# refreshes the canvas
+
+sub draw_canvas() {
+
+  return (
+    Selector::draw_canvas($Cache->{canvas}),
+    Selector::draw_highlighted($Cache->{canvas}),
 
   );
 
@@ -130,33 +235,35 @@ sub draw_cchar() {
 # ---   *   ---   *   ---
 # state proc
 
-sub each_frame() {
+sub on_refresh() {
 
-  drawcmd(
-    draw_cchar(),
+  my @req=(! $Cache->{cmode})
+    ? (draw_canvas(),draw_ctlbar())
+    : draw_ctlbar()
+    ;
 
-  );
+  drawcmd(@req);
 
 };
 
 # ---   *   ---   *   ---
 # the bit
 
-my $main=defmain(
+my $Main=defmain(
 
   quit  => sub () {
     return $Cache->{terminate};
 
   },
 
-  logic => {proc=>\&each_frame},
+  logic => {proc=>\&on_refresh},
 
 );
 
 # ---   *   ---   *   ---
 # ^exec
 
-$main->(
+$Main->(
 
   panic        => 0,
 

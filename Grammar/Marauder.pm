@@ -31,6 +31,7 @@ package Grammar::Marauder;
 
   use Arstd::Array;
   use Arstd::String;
+  use Arstd::Re;
   use Arstd::IO;
 
   use Tree::Grammar;
@@ -75,7 +76,7 @@ BEGIN {
 
     ncolon => qr{[^:]+},
 
-    degree => Lang::eiths(
+    degree => re_eiths(
 
       [qw(
 
@@ -91,7 +92,7 @@ BEGIN {
 
     ),
 
-#    mode => Lang::eiths(
+#    mode => re_eiths(
 #
 #      [qw(
 #

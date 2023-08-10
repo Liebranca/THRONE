@@ -25,14 +25,18 @@ package Selector;
   use English qw(-no_match_vars);
 
   use lib $ENV{'ARPATH'}.'/lib/sys/';
+
   use Style;
+  use Arstd::Int;
+  use Arstd::String;
 
   use lib $ENV{'ARPATH'}.'/lib/';
 
   use Lycon;
-  use Lycon::Kbd;
+
   use Lycon::Ctl;
   use Lycon::Loop;
+  use Lycon::Gen;
 
   use GF::Mode::ANSI;
 
@@ -41,7 +45,7 @@ package Selector;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.2;#b
+  our $VERSION = v0.00.3;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -71,35 +75,33 @@ package Selector;
     terminate => 0,
     refresh   => 0,
 
-    table_sz  => 16,
-    table_pos => [0,0],
-    table_sel => [0,0],
+    table     => {
 
-    cchar     => q[ ],
+      sel   => GF::Vec4->nit(0,0),
+      pos   => GF::Vec4->nit(0,0),
+
+      dim   => [[0,16],[0,16]],
+
+      buf   => $CHARS,
+      cchar => q[ ],
+
+    },
+
+    fg_color  => 0x7,
+    bg_color  => 0x0,
 
   };
 
 # ---   *   ---   *   ---
+# get fg and bg colors as
+# single byte
 
-sub get_highlighted() {
+sub get_color() {
 
-  my ($x,$y)   = @{$Cache->{table_pos}};
-  my ($dx,$dy) = @{$Cache->{table_sel}};
-
-  my $sz       = $Cache->{table_sz};
-  my $i        = $dx+($dy*$sz);
-
-  my $limit    = @$CHARS;
-  my $c        = $CHARS->[$i];
-
-  if($i>=$limit) {
-    $c=q[ ];
-
-  };
-
-  $Cache->{cchar}=$c;
-
-  return $c;
+  return
+    ($Cache->{fg_color} << 0)
+  | ($Cache->{bg_color} << 4)
+  ;
 
 };
 
@@ -108,29 +110,48 @@ sub get_highlighted() {
 
 sub draw_table() {
 
-  my @out    = ();
-  my @ar     = @$CHARS;
+  return (
+    draw_canvas($Cache->{table}),
+    draw_highlighted($Cache->{table}),
 
-  my $sz     = $Cache->{table_sz};
-  my $i      = 0;
+  );
 
-  my ($x,$y) = @{$Cache->{table_pos}};
+};
 
-  while($i<@ar) {
+# ---   *   ---   *   ---
+# ^shorthand for drawing
+# array of chars
+
+sub draw_canvas($canvas) {
+
+  my $sz     = $canvas->{dim}->[0]->[1];
+  my $buf    = $canvas->{buf};
+
+  my ($x,$y) = @{$canvas->{pos}};
+
+  my $i=-$sz;
+  $y--;
+
+  my $cnt=int_urdiv(int @$buf,$sz);
+
+  return map {
+
+    $i+=$sz;
+    $y++;
 
     my $limit = $i+($sz-1);
 
-    $limit    = ($limit>$#ar)
-      ? $#ar
+    $limit    = ($limit > @$buf-1)
+      ? @$buf-1
       : $limit
       ;
 
-    my @row   = @ar[$i..$limit];
-    my $diff  = $sz-($limit-$i);
+    my @row   = @{$buf}[$i..$limit];
+    my $diff  = $sz - ($limit-$i);
 
     push @row,(q[ ]) x $diff;
 
-    my $cmd={
+    {
 
       proc => 'mvcur',
       args => [$x,$y],
@@ -139,102 +160,151 @@ sub draw_table() {
 
     };
 
-    push @out,$cmd;
-
-    $i+=$sz;
-    $y+=1;
-
-  };
-
-  return @out;
+  } 0..$cnt-1;
 
 };
 
 # ---   *   ---   *   ---
 # ^ivs color on selected char
 
-sub draw_highlighted() {
+sub draw_highlighted($canvas) {
 
-  my ($x,$y)   = @{$Cache->{table_pos}};
-  my ($dx,$dy) = @{$Cache->{table_sel}};
-
-  my $c        = get_highlighted();
-
-  my $pos={
-    proc=>'mvcur',
-    args=>[$x+$dx,$y+$dy],
-
-  };
-
-  my $color={
-    proc => 'color',
-    args => [0x30],
-
-    ct   => $c,
-
-  };
+  get_highlighted($canvas);
 
   return (
 
-    # move and color on
-    $pos,
-    $color,
+    # print cchar with color
+    draw_cursor($canvas),
 
     # ^color off
-    {proc => 'bnw'}
+    {proc => 'bnw'},
 
   );
 
 };
 
 # ---   *   ---   *   ---
+# shorthand for getting
+# cursor on canvas
+
+sub draw_cursor($canvas) {
+
+  my ($x,$y)   = @{$canvas->{pos}};
+  my ($dx,$dy) = @{$canvas->{sel}};
+
+  my $mvcur={
+    proc=>'mvcur',
+    args=>[$x+$dx,$y+$dy],
+
+  };
+
+  my $c=$canvas->{cchar};
+
+  my $color={
+    proc => 'color',
+    args => [0x30],
+
+    ct   => descape($c),
+
+  };
+
+  return ($mvcur,$color);
+
+};
+
+# ---   *   ---   *   ---
+# ^get char under cursor
+
+sub get_highlighted($canvas) {
+
+  my $i        = get_curpos($canvas);
+
+  my $limit    = int @{$canvas->{buf}};
+  my $c        = $canvas->{buf}->[$i];
+
+  if($i>=$limit) {
+    $c=q[ ];
+
+  };
+
+  $canvas->{cchar}=$c;
+
+};
+
+# ---   *   ---   *   ---
+# ^get cursor position
+
+sub get_curpos($canvas) {
+
+  my ($x,$y)   = @{$canvas->{pos}};
+  my ($dx,$dy) = @{$canvas->{sel}};
+
+  my $sz       = $canvas->{dim}->[0]->[1];
+  my $i        = $dx+($dy*$sz);
+
+  return $i;
+
+};
+
+# ---   *   ---   *   ---
+# clears the table without
+# a direct screen clear
+
+sub clear_canvas($canvas) {
+
+  my $sz     = $canvas->{dim}->[0]->[1];
+  my $i      = 0;
+
+  my ($x,$y) = @{$canvas->{pos}};
+
+  $y--;
+
+  return map {
+
+    $y++;
+
+    { proc => 'mvcur',
+      args => [$x,$y],
+
+      ct   => q[ ] x ($sz+1),
+
+    };
+
+  } 0..$sz-1;
+
+};
+
+# ---   *   ---   *   ---
 # keeps this package in control
 
-sub rept() {
+sub rept(@beq) {
+
   my $Q=get_module_queue();
-  $Q->add(\&rept) if ! $Cache->{terminate};
+  $Q->skip(\&rept,@beq) if ! $Cache->{terminate};
 
   on_refresh();
+  map {$ARG->();} @beq;
 
 };
 
 # ---   *   ---   *   ---
 # ^triggers control transfer
 
-sub ctl_take() {
+sub ctl_take(@beq) {
 
   $Cache->{terminate}=0;
+
   my $Q=get_module_queue();
-  $Q->add(\&rept);
+
+  my @call = caller;
+
+  my $pkg  = $call[0];
+  my $fn   = "$pkg\::ctl_take";
+
+  $Q->add(\&$fn);
+  $Q->skip(\&rept,@beq);
 
   Lycon::Loop::transfer();
-
-};
-
-# ---   *   ---   *   ---
-# movement keys
-
-sub mvlft() {
-  my $xref  = \$Cache->{table_sel}->[0];
-  $$xref   -= 1*($$xref>0);
-
-};
-
-sub mvrgt() {
-  my $xref  = \$Cache->{table_sel}->[0];
-  $$xref   += 1*($$xref<$Cache->{table_sz}-1);
-
-};
-
-sub mvbak() {
-  my $yref  = \$Cache->{table_sel}->[1];
-  $$yref   += 1*($$yref<$Cache->{table_sz}-1);
-
-};
-
-sub mvfwd() {
-  my $yref  = \$Cache->{table_sel}->[1];
-  $$yref   -= 1*($$yref>0);
 
 };
 
@@ -243,15 +313,49 @@ sub mvfwd() {
 
 Lycon::Ctl::register_events(
 
+  # quit to main
   tab=>[sub {
     $Cache->{terminate}=1;
 
   },0,0],
 
-  w=>[\&mvfwd,\&mvfwd,0],
-  a=>[\&mvlft,\&mvlft,0],
-  s=>[\&mvbak,\&mvbak,0],
-  d=>[\&mvrgt,\&mvrgt,0],
+  # select FG color
+  left=>[sub {
+    $Cache->{fg_color}--;
+    $Cache->{fg_color}&=0xF;
+
+  },0,0],
+
+  right=>[sub {
+    $Cache->{fg_color}++;
+    $Cache->{fg_color}&=0xF;
+
+  },0,0],
+
+  # select BG color
+  down=>[sub {
+    $Cache->{bg_color}--;
+    $Cache->{bg_color}&=0xF;
+
+  },0,0],
+
+  up=>[sub {
+    $Cache->{bg_color}++;
+    $Cache->{bg_color}&=0xF;
+
+  },0,0],
+
+  # movement keys
+  Lycon::Gen::wasd(
+
+    $Cache->{table}->{sel},
+    $Cache->{table}->{dim},
+
+    tap=>1,
+    hel=>1,
+    rel=>0,
+
+  ),
 
 );
 
@@ -260,12 +364,12 @@ Lycon::Ctl::register_events(
 
 sub on_refresh() {
 
-  drawcmd(
+  my @req=(! $Cache->{terminate})
+    ? draw_table()
+    : clear_canvas($Cache->{table}),
+    ;
 
-    draw_table(),
-    draw_highlighted(),
-
-  );
+  drawcmd(@req);
 
 };
 

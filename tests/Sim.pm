@@ -138,7 +138,7 @@ while($panic--) {
 
   $cell->prich();
 
-  if($dst && ! $char->walk_to($dst)) {
+  if($dst &&! $char->walk_to($dst)) {
     $char->touch($dst);
     $dst=undef;
 

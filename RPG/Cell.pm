@@ -105,7 +105,7 @@ sub tile($class,$frame,$x,$y) {
 
   $self=$grid->[$y]->[$x];
 
-  if(!defined $self) {
+  if(! defined $self) {
 
     $self=bless {
 
@@ -210,7 +210,7 @@ sub nit_rect($class,$frame) {
 
 sub fetch($class,$id,%O) {
 
-  my $frame=(!exists $World->{$id})
+  my $frame=(! exists $World->{$id})
     ? $World->{$id}
     : $class->new($id,%O)
     ;
@@ -250,7 +250,7 @@ sub set($class,$frame,$cell,$o) {
   my $free          = $frame->{free};
 
   $cell->{occu}     = $o;
-  $free->[$y]->[$x] = int(!defined $o);
+  $free->[$y]->[$x] = int(! defined $o);
 
   return $cell;
 
