@@ -34,6 +34,7 @@ package main;
   use Lycon::Ctl;
   use Lycon::Loop;
   use Lycon::Gen;
+  use Lycon::Kbd;
 
   use GF::Mode::ANSI;
 
@@ -43,6 +44,8 @@ package main;
 # app packages
 
   use lib dirof(__FILE__);
+
+  use Canvas;
   use Selector;
   use Inserter;
 
@@ -51,6 +54,19 @@ package main;
 
   our $VERSION = v0.00.5;#b
   our $AUTHOR  = 'IBN-3DILA';
+
+# ---   *   ---   *   ---
+# ROM
+
+  Readonly my $RUN_OPTS=>{
+
+    panic        => 0,
+
+    clear_screen => 1,
+    hide_cursor  => 1,
+    reset_cursor => 1,
+
+  };
 
 # ---   *   ---   *   ---
 # GBL
@@ -66,58 +82,85 @@ package main;
   };
 
 # ---   *   ---   *   ---
-# triggers control switch
+# show char selection screen
 
-sub switch_ctx($pkg,$mode,@args) {
-
-  my $fn="$pkg\::ctl_take";
-     $fn=\&$fn;
-
-  $Cache->{cmode}=$mode;
-  $fn->(@args);
-
-};
-
-# ---   *   ---   *   ---
-# ^ice for showing char
-# selection screen
-
-sub run_selector() {
+sub call_selector() {
 
   drawcmd(
-    Selector::draw_canvas($Cache->{canvas})
+    $Cache->{canvas}->draw(0)
 
   );
 
-  switch_ctx('Selector',1,\&on_refresh);
+  ctl_switch('Selector',\&draw);
 
 };
 
 # ---   *   ---   *   ---
-# ^ice for enabling text input
+# enable text input
 
-sub run_inserter() {
-  switch_ctx('Inserter',2);
+sub call_inserter() {
+  ctl_switch('Inserter');
 
 };
 
 # ---   *   ---   *   ---
-# restores control to package
+# generate control transfers
 
-sub ctl_take() {
-  $Cache->{cmode}=0;
+Lycon::Ctl::register_xfers(
 
-};
+  ret => sub {
+    $Cache->{cmode}=0;
+
+  },
+
+  switch => sub ($pkg) {
+
+    state $tab={
+      'Selector'=>1,
+      'Inserter'=>2,
+
+    };
+
+    $Cache->{cmode}=$tab->{$pkg};
+
+  },
+
+);
+
+# ---   *   ---   *   ---
+# keys used by module
+
+Lycon::Ctl::register_events(
+
+  # exit to tty
+  q=>[0,0,sub {
+    $Cache->{terminate}=keyhel('LCtrl');
+
+  }],
+
+  LCtrl=>[0,0,0],
+
+  # mode switches
+  tab => [\&call_selector,0,0],
+  i   => [\&call_inserter,0,0],
+
+  # put/clear char at cursor
+  ret   => [\&putc,\&putc,0],
+  space => [\&popc,\&popc,0],
+
+  # movement keys
+  Lycon::Gen::wasd(
+    $Cache->{canvas}->{sel},
+    $Cache->{canvas}->{dim},
+
+  ),
+
+);
 
 # ---   *   ---   *   ---
 # put char
 
-sub paint() {
-
-  my $i=Selector::get_curpos(
-    $Cache->{canvas}
-
-  );
+sub putc() {
 
   Inserter::putc(
     $Selector::Cache->{table}->{cchar},
@@ -128,117 +171,18 @@ sub paint() {
 };
 
 # ---   *   ---   *   ---
-# keys used by module
+# ^remove
 
-Lycon::Ctl::register_events(
-
-  # exit to tty
-  escape=>[0,0,sub {
-    $Cache->{terminate}=1;
-
-  }],
-
-  # mode switches
-  tab => [\&run_selector,0,0],
-  i   => [\&run_inserter,0,0],
-
-  # put char at cursor
-  ret=>[\&paint,\&paint,0],
-
-  # movement keys
-  Lycon::Gen::wasd(
-
-    $Cache->{canvas}->{sel},
-    $Cache->{canvas}->{dim},
-
-    tap=>1,
-    hel=>1,
-    rel=>0,
-
-  ),
-
-);
-
-# ---   *   ---   *   ---
-# puts selected on screen
-
-sub draw_cchar() {
-
-  return {
-    proc => 'color',
-    args => [0x03],
-
-    ct   =>
-      'SEL ['
-    . $Selector::Cache->{table}->{cchar}
-
-    . '] | '
-    . (sprintf "%03X",ord(
-        $Selector::Cache->{table}->{cchar}
-
-    )),
-
-  };
-
-};
-
-# ---   *   ---   *   ---
-# ^shows selected color
-
-sub draw_ccolor() {
-
-  my $color=Selector::get_color();
-
-  return {
-    ct   => " | COLOR ",
-
-  },{
-
-    proc => 'color',
-    args => [$color],
-
-    ct   => (sprintf "%02X",$color),
-
-  };
-
-};
-
-# ---   *   ---   *   ---
-# draws bar at screen bottom
-
-sub draw_ctlbar() {
-
-  my $pos={
-    proc=>'mvcur',
-    args=>[0x00,0xFF],
-
-  };
-
-  return (
-
-    $pos,
-
-    draw_cchar(),
-    draw_ccolor(),
-
-    # ^color off
-    {proc => 'bnw'},
-
-  );
+sub popc() {
+  Inserter::putc($NULLSTR,$Cache->{canvas});
 
 };
 
 # ---   *   ---   *   ---
 # state proc
 
-sub on_refresh() {
-
-  my @req=(! $Cache->{cmode})
-    ? (Inserter::draw_canvas(),draw_ctlbar())
-    : draw_ctlbar()
-    ;
-
-  drawcmd(@req);
+sub draw() {
+  Inserter::draw($Cache->{cmode});
 
 };
 
@@ -252,22 +196,16 @@ my $Main=defmain(
 
   },
 
-  logic => {proc=>\&on_refresh},
+  logic => {proc=>\&draw},
 
 );
+
+Selector::kick();
 
 # ---   *   ---   *   ---
 # ^exec
 
-$Main->(
-
-  panic        => 0,
-
-  clear_screen => 1,
-  hide_cursor  => 1,
-  reset_cursor => 1,
-
-);
+$Main->(%$RUN_OPTS);
 
 # ---   *   ---   *   ---
 1; # ret

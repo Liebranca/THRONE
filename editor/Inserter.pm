@@ -23,6 +23,7 @@ package Inserter;
   use Readonly;
 
   use English qw(-no_match_vars);
+  use List::Util qw(min);
 
   use lib $ENV{'ARPATH'}.'/lib/sys/';
 
@@ -47,6 +48,8 @@ package Inserter;
 # app packages
 
   use lib dirof(__FILE__);
+
+  use Canvas;
   use Selector;
 
 # ---   *   ---   *   ---
@@ -63,17 +66,10 @@ package Inserter;
 
   our $Cache={
 
-    canvas=>{
+    canvas=>Canvas->new(
+      pos=>[16,9],
 
-      sel   => GF::Vec4->nit(0,0),
-      pos   => GF::Vec4->nit(16,9),
-
-      dim   => [[0,16],[0,16]],
-
-      buf   => [],
-      cchar => q[ ],
-
-    },
+    ),
 
     ti=>{
 
@@ -85,49 +81,57 @@ package Inserter;
 
     },
 
+    cmode=>0,
+
   };
 
-  $Cache->{canvas}->{buf}=[(q[ ]) x (
-    $Cache->{canvas}->{dim}->[0]->[1]
-  * $Cache->{canvas}->{dim}->[1]->[1]
-
-  )];
-
 # ---   *   ---   *   ---
-# keeps this package in control
+# show char selection screen
 
-sub rept(@beq) {
+sub call_selector() {
 
-  my $Q=get_module_queue();
-  $Q->skip(\&rept,@beq) if ! $Cache->{terminate};
+  drawcmd(
+    $Cache->{canvas}->draw(0)
 
-  proc_input();
+  );
 
-  on_refresh();
-  map {$ARG->()} @beq;
+  ctl_switch('Selector',\&draw);
 
 };
 
 # ---   *   ---   *   ---
-# ^triggers control transfer
+# generate control transfers
 
-sub ctl_take(@beq) {
+Lycon::Ctl::register_xfers(
 
-  $Cache->{terminate}=0;
+  call=>sub {
+    $Cache->{terminate}=0;
 
-  my $Q=get_module_queue();
+  },
 
-  my @call = caller;
+  loop=>sub {
+    proc_input();
+    return ! $Cache->{terminate};
 
-  my $pkg  = $call[0];
-  my $fn   = "$pkg\::ctl_take";
+  },
 
-  $Q->add(\&$fn);
-  $Q->skip(\&rept,@beq);
+  ret => sub {
+    $Cache->{cmode}=0;
 
-  Lycon::Loop::transfer($pkg);
+  },
 
-};
+  switch => sub ($pkg) {
+
+    state $tab={
+      'Selector'=>1,
+
+    };
+
+    $Cache->{cmode}=$tab->{$pkg};
+
+  },
+
+);
 
 # ---   *   ---   *   ---
 # keys used by module
@@ -135,20 +139,18 @@ sub ctl_take(@beq) {
 Lycon::Ctl::register_events(
 
   # quit to main
-  tab=>[sub {
+  escape=>[sub {
     $Cache->{terminate}=1;
 
   },0,0],
 
+  # mode switches
+  tab => [\&call_selector,0,0],
+
   # movement keys
   Lycon::Gen::arrows(
-
     $Cache->{canvas}->{sel},
     $Cache->{canvas}->{dim},
-
-    tap=>1,
-    hel=>1,
-    rel=>0,
 
   ),
 
@@ -181,11 +183,12 @@ sub putmove($c,$canvas) {
 
   my ($x,$y)   = @{$canvas->{sel}};
   my ($lx,$ly) = @{$canvas->{dim}};
+     ($lx,$ly) = ($lx->[1],$ly->[1]);
 
   # enter
   if($c eq "\n") {
     $x  = 0;
-    $y += $y < $ly;
+    $y += 1 * ($y < $ly);
 
   # backspace
   } elsif($c eq "\b") {
@@ -198,7 +201,7 @@ sub putmove($c,$canvas) {
   # ^space or anything else
   } else {
     putc($c,$canvas);
-    $x++;
+    $x += 1 * ($x < $lx);
 
   };
 
@@ -219,25 +222,84 @@ sub putmove($c,$canvas) {
 
 sub putc($c,$canvas) {
 
-  my $i    = Selector::get_curpos($canvas);
+  my $i    = $canvas->get_cpos();
 
   my $beg  = Selector::get_color();
      $beg  = graphics()->color($beg);
 
   my $end  = graphics()->bnw();
 
-  $canvas->{buf}->[$i]="$beg$c$end";
+  $canvas->{buf}->[$i]=(length $c)
+    ? "$beg$c$end"
+    : ' '
+    ;
 
 };
 
 # ---   *   ---   *   ---
-# refreshes the canvas
+# puts selected on screen
 
-sub draw_canvas() {
+sub draw_cchar() {
+
+  return {
+    proc => 'color',
+    args => [0x03],
+
+    ct   =>
+      'SEL ['
+    . $Selector::Cache->{table}->{cchar}
+
+    . '] | '
+    . (sprintf "%03X",ord(
+        $Selector::Cache->{table}->{cchar}
+
+    )),
+
+  };
+
+};
+
+# ---   *   ---   *   ---
+# ^shows selected color
+
+sub draw_ccolor() {
+
+  my $color=Selector::get_color();
+
+  return {
+    ct   => " | COLOR ",
+
+  },{
+
+    proc => 'color',
+    args => [$color],
+
+    ct   => (sprintf "%02X",$color),
+
+  };
+
+};
+
+# ---   *   ---   *   ---
+# draws bar at screen bottom
+
+sub draw_ctlbar() {
+
+  my $pos={
+    proc=>'mvcur',
+    args=>[0x00,0xFF],
+
+  };
 
   return (
-    Selector::draw_canvas($Cache->{canvas}),
-    Selector::draw_highlighted($Cache->{canvas}),
+
+    $pos,
+
+    draw_cchar(),
+    draw_ccolor(),
+
+    # ^color off
+    {proc => 'bnw'},
 
   );
 
@@ -246,12 +308,23 @@ sub draw_canvas() {
 # ---   *   ---   *   ---
 # frame update
 
-sub on_refresh() {
+sub draw($ext=undef) {
 
-  drawcmd(
-    draw_canvas()
+  my $cmode=(! defined $ext)
+    ? $Cache->{cmode}
+    : $ext
+    ;
 
-  );
+  my @req=(! $cmode)
+    ? ($Cache->{canvas}->draw(1),
+       draw_ctlbar()
+
+      )
+
+    : (draw_ctlbar())
+    ;
+
+  drawcmd(@req);
 
 };
 
