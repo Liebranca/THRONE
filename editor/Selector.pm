@@ -304,7 +304,7 @@ sub ctl_take(@beq) {
   $Q->add(\&$fn);
   $Q->skip(\&rept,@beq);
 
-  Lycon::Loop::transfer();
+  Lycon::Loop::transfer($pkg);
 
 };
 

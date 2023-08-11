@@ -44,6 +44,7 @@ package main;
 
   use lib dirof(__FILE__);
   use Selector;
+  use Inserter;
 
 # ---   *   ---   *   ---
 # info
@@ -60,43 +61,48 @@ package main;
     refresh    => 0,
     cmode      => 0,
 
-    canvas     => {
-
-      sel   => GF::Vec4->nit(0,0),
-      pos   => GF::Vec4->nit(16,9),
-
-      dim   => [[0,16],[0,16]],
-
-      buf   => [],
-      cchar => q[ ],
-
-    },
+    canvas     => $Inserter::Cache->{canvas},
 
   };
-
-  $Cache->{canvas}->{buf}=[(q[ ]) x (
-    $Cache->{canvas}->{dim}->[0]->[1]
-  * $Cache->{canvas}->{dim}->[1]->[1]
-
-  )];
 
 # ---   *   ---   *   ---
 # triggers control switch
 
-sub switch_ctx() {
+sub switch_ctx($pkg,$mode,@args) {
+
+  my $fn="$pkg\::ctl_take";
+     $fn=\&$fn;
+
+  $Cache->{cmode}=$mode;
+  $fn->(@args);
+
+};
+
+# ---   *   ---   *   ---
+# ^ice for showing char
+# selection screen
+
+sub run_selector() {
 
   drawcmd(
     Selector::draw_canvas($Cache->{canvas})
 
   );
 
-  $Cache->{cmode}=1;
-  Selector::ctl_take(\&on_refresh);
+  switch_ctx('Selector',1,\&on_refresh);
 
 };
 
 # ---   *   ---   *   ---
-# ^restores
+# ^ice for enabling text input
+
+sub run_inserter() {
+  switch_ctx('Inserter',2);
+
+};
+
+# ---   *   ---   *   ---
+# restores control to package
 
 sub ctl_take() {
   $Cache->{cmode}=0;
@@ -113,14 +119,11 @@ sub paint() {
 
   );
 
-  my $beg  = Selector::get_color();
-     $beg  = graphics()->color($beg);
+  Inserter::putc(
+    $Selector::Cache->{table}->{cchar},
+    $Cache->{canvas}
 
-  my $char = $Selector::Cache->{table}->{cchar};
-
-  my $end  = graphics()->bnw();
-
-  $Cache->{canvas}->{buf}->[$i]="$beg$char$end";
+  );
 
 };
 
@@ -135,8 +138,9 @@ Lycon::Ctl::register_events(
 
   }],
 
-  # get char selector
-  tab=>[\&switch_ctx,0,0],
+  # mode switches
+  tab => [\&run_selector,0,0],
+  i   => [\&run_inserter,0,0],
 
   # put char at cursor
   ret=>[\&paint,\&paint,0],
@@ -164,10 +168,15 @@ sub draw_cchar() {
     proc => 'color',
     args => [0x03],
 
-    ct   => 'SEL [' .
-      $Selector::Cache->{table}->{cchar} .
+    ct   =>
+      'SEL ['
+    . $Selector::Cache->{table}->{cchar}
 
-    ']',
+    . '] | '
+    . (sprintf "%03X",ord(
+        $Selector::Cache->{table}->{cchar}
+
+    )),
 
   };
 
@@ -220,25 +229,12 @@ sub draw_ctlbar() {
 };
 
 # ---   *   ---   *   ---
-# refreshes the canvas
-
-sub draw_canvas() {
-
-  return (
-    Selector::draw_canvas($Cache->{canvas}),
-    Selector::draw_highlighted($Cache->{canvas}),
-
-  );
-
-};
-
-# ---   *   ---   *   ---
 # state proc
 
 sub on_refresh() {
 
   my @req=(! $Cache->{cmode})
-    ? (draw_canvas(),draw_ctlbar())
+    ? (Inserter::draw_canvas(),draw_ctlbar())
     : draw_ctlbar()
     ;
 
