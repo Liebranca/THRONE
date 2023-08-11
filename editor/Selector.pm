@@ -51,13 +51,21 @@ package Selector;
   use Canvas;
 
 # ---   *   ---   *   ---
+# adds to your namespace
+
+  use Exporter 'import';
+  our @EXPORT=qw($COLOR_F);
+
+# ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.4;#b
+  our $VERSION = v0.00.5;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
 # ROM
+
+  Readonly our $COLOR_F=>'bitcolor';
 
   Readonly my $CHARS_N=>[
     (0x0020..0x007E),
@@ -92,30 +100,57 @@ package Selector;
 
     ),
 
-    # ^draw color pick
+    # ^color pick
     colors => Canvas->new(
-      pos=>[16,0]
+      pos=>[16,0],
 
     ),
 
+    colors_b => Canvas->new(
+      pos=>[16,0],
+
+    ),
+
+    # ^currently selected
+    c_color_tab => undef,
+
   };
+
+  # ^foreground pick active by default
+  $Cache->{c_color_tab}=$Cache->{colors};
 
 # ---   *   ---   *   ---
 # ^nits Lycon-dependent state
 
 sub kick() {
 
+  # foreground
   $Cache->{colors}->{buf}=[map {
 
-    graphics()->color($ARG)
+    graphics()->$COLOR_F($ARG)
   . q[$]
 
   . graphics()->bnw()
 
   } 0..0xFF];
 
-  $Cache->{colors}->{sel}->[0]=0x7;
+  $Cache->{colors}->{sel}->[0]=0xF;
+  $Cache->{colors}->{sel}->[1]=0xF;
   $Cache->{colors}->get_cchar();
+
+
+  # ^background
+  $Cache->{colors_b}->{buf}=[map {
+
+    graphics()->$COLOR_F($ARG << 8)
+  . q[$]
+
+  . graphics()->bnw()
+
+  } 0..0xFF];
+
+  $Cache->{colors_b}->{sel}->[0]=0x00;
+  $Cache->{colors_b}->get_cchar();
 
 };
 
@@ -147,43 +182,36 @@ Lycon::Ctl::register_events(
 
   },0,0],
 
-  # select FG color
-  left=>[sub {
-    $Cache->{fg_color}--;
-    $Cache->{fg_color}&=0xF;
+  # switch between foreground
+  # and background color pick
+  LShift=>[
 
-  },0,0],
+    0,
 
-  right=>[sub {
-    $Cache->{fg_color}++;
-    $Cache->{fg_color}&=0xF;
+    # bg if held
+    sub {
+      $Cache->{c_color_tab}=
+        $Cache->{colors_b};
 
-  },0,0],
+    },
 
-  # select BG color
-  down=>[sub {
-    $Cache->{bg_color}--;
-    $Cache->{bg_color}&=0xF;
+    # ^else fg
+    sub {
+      $Cache->{c_color_tab}=
+        $Cache->{colors};
 
-  },0,0],
+    }
 
-  up=>[sub {
-    $Cache->{bg_color}++;
-    $Cache->{bg_color}&=0xF;
-
-  },0,0],
+  ],
 
   # movement keys
   Lycon::Gen::wasd(
-    $Cache->{table}->{sel},
-    $Cache->{table}->{dim},
+    \$Cache->{table},'sel','dim'
 
   ),
 
-  # movement keys
   Lycon::Gen::arrows(
-    $Cache->{colors}->{sel},
-    $Cache->{colors}->{dim},
+    \$Cache->{c_color_tab},'sel','dim'
 
   ),
 
@@ -194,7 +222,12 @@ Lycon::Ctl::register_events(
 # single byte
 
 sub get_color() {
-  return $Cache->{colors}->{cpos};
+
+  return
+
+    ($Cache->{colors}->{cpos} << 0)
+  | ($Cache->{colors_b}->{cpos} << 8)
+  ;
 
 };
 
@@ -206,12 +239,12 @@ sub draw() {
   my @req=(! $Cache->{terminate})
 
     ? ($Cache->{table}->draw(1),
-       $Cache->{colors}->draw(1),
+       $Cache->{c_color_tab}->draw(1),
 
       )
 
     : ($Cache->{table}->clear(),
-       $Cache->{colors}->clear(),
+       $Cache->{c_color_tab}->clear(),
 
       )
 

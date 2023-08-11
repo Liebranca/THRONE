@@ -150,8 +150,7 @@ Lycon::Ctl::register_events(
 
   # movement keys
   Lycon::Gen::wasd(
-    $Cache->{canvas}->{sel},
-    $Cache->{canvas}->{dim},
+    \$Cache->{canvas},'sel','dim'
 
   ),
 

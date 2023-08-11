@@ -149,8 +149,7 @@ Lycon::Ctl::register_events(
 
   # movement keys
   Lycon::Gen::arrows(
-    $Cache->{canvas}->{sel},
-    $Cache->{canvas}->{dim},
+    \$Cache->{canvas},'sel','dim'
 
   ),
 
@@ -225,7 +224,7 @@ sub putc($c,$canvas) {
   my $i    = $canvas->get_cpos();
 
   my $beg  = Selector::get_color();
-     $beg  = graphics()->color($beg);
+     $beg  = graphics()->$COLOR_F($beg);
 
   my $end  = graphics()->bnw();
 
@@ -271,10 +270,10 @@ sub draw_ccolor() {
 
   },{
 
-    proc => 'color',
+    proc => $COLOR_F,
     args => [$color],
 
-    ct   => (sprintf "%02X",$color),
+    ct   => (sprintf "%04X",$color),
 
   };
 
