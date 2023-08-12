@@ -10,30 +10,47 @@
   use strict;
   use warnings;
 
+  use Time::HiRes qw(usleep);
   use English qw(-no_match_vars);
 
+  use lib $ENV{'ARPATH'}.'/lib/sys/';
+  use Style;
+
+  use lib $ENV{'ARPATH'}.'/lib/';
+  use GF::Icon;
+  use GF::Mode::ANSI;
+
   use lib $ENV{'ARPATH'}.'/THRONE/';
-  use RPG::Actor;
+  use RPG::Bar;
 
 # ---   *   ---   *   ---
 
-my $grid=RPG::Grid->new_frame();
+my $f     = GF::Mode::ANSI->new_frame();
 
-$grid->nit(8,8);
-my $act=$grid->new_actor([0,0]);
+my $x     = RPG::Bar->new(max=>100,rate=>8);
+my $color = $f->truecolor($x->{color});
 
-my $i=0;
-while($i<7) {
+while(! $x->{stop}) {
 
-  $grid->draw();
-  $act->move('right');
+  $x->damage();
 
-  $i++;
-  say "wat $i";
+  my @bar = $x->update();
+  my $y   = 29 - $#bar;
 
-  usleep(100000);
+  map {
+    print {*STDOUT} "\e[${y}H$color$ARG\e[0m";
+    $y++;
+
+  } @bar;
+
+  STDOUT->flush();
+
+  usleep(10000);
 
 };
+
+say $NULLSTR;
+
 
 # ---   *   ---   *   ---
 1; # ret

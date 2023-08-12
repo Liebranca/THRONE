@@ -36,6 +36,7 @@ package main;
   use Lycon::Gen;
   use Lycon::Kbd;
 
+  use GF::Icon;
   use GF::Mode::ANSI;
 
   use lib $ENV{'ARPATH'}.'/THRONE/';
@@ -62,7 +63,7 @@ package main;
 
     panic        => 0,
 
-    clear_screen => 1,
+    clear_screen => 0,
     hide_cursor  => 1,
     reset_cursor => 1,
 
@@ -80,6 +81,11 @@ package main;
     canvas     => $Inserter::Cache->{canvas},
 
   };
+
+  my $Icon_Test=GF::Icon->new(
+    [map {chr($ARG)} 0x17F..0x185],
+
+  );
 
 # ---   *   ---   *   ---
 # show char selection screen
@@ -181,7 +187,21 @@ sub popc() {
 # state proc
 
 sub draw() {
+
   Inserter::draw($Cache->{cmode});
+
+  drawcmd({
+
+    proc => 'mvcur',
+    args => [0x0,0xFF],
+
+  },{
+
+    proc => $COLOR_F,
+    args => [Selector::get_color()],
+    ct   => $Icon_Test->play(fBy()),
+
+  });
 
 };
 
