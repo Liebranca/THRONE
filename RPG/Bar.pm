@@ -33,51 +33,65 @@ package RPG::Bar;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.1;#b
+  our $VERSION = v0.00.2;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
 # cstruc
 
-sub new($class,%O) {
+sub new($class,$attr,%O) {
 
-  $O{max}   //= 100;
-  $O{cur}   //= $O{max};
-
-  $O{color} //= 0x000000800000;
+  $O{color} //= 0b10000000;
   $O{anim}  //= $GF::Icon::PAIN;
-  $O{rate}  //= 4;
 
-
-  # calc num sprites
-  my $len=@{$O{anim}};
-  my $cnt=int_urdiv($O{max},$len);
 
   my $self=bless {
 
-    max    => $O{max},
-    cur    => $O{cur},
-
+    attr   => $attr,
     color  => $O{color},
 
-    cnt    => $cnt,
+    scale  => int @{$O{anim}},
+
     prev   => [0,0],
     stop   => 0,
 
-    animar => [map {
-      GF::Icon->new($O{anim},rate=>$O{rate}),
-
-    } 0..$cnt-1],
-
+    anim   => $O{anim},
+    animar => [],
 
     cframe => '',
 
 
   },$class;
 
-  $self->update_instant();
+
+  $self->update_animar();
 
   return $self;
+
+};
+
+# ---   *   ---   *   ---
+# syncs anim array to attr
+
+sub update_animar($self,$set=undef) {
+
+  # new icon set passed
+  if($set) {
+    $self->{anim}  = $set;
+    $self->{scale} = int @$set;
+
+  };
+
+
+  # ^create array of icons
+  $self->{animar}=[map {
+    GF::Icon->new($self->{anim}),
+
+  } 0..$self->{attr}->{total}-1];
+
+
+  # seek to current frame
+  $self->update_instant();
 
 };
 
@@ -86,10 +100,12 @@ sub new($class,%O) {
 
 sub update($self) {
 
+  goto SKIP if $self->{stop};
+
   my ($beg_idex,$beg_cent)=@{$self->{prev}};
   my ($end_idex,$end_cent)=$self->get_cent();
 
-  my $limit = $self->{cnt}-1;
+  my $limit = $self->{attr}->{total}-1;
 
   my $ar    = $self->{animar};
   my $ico   = $ar->[$beg_idex];
@@ -99,6 +115,7 @@ sub update($self) {
   if($beg_cent < $end_cent) {
     $ico->play_stop();
 
+  # ^backwards when healing
   } elsif($beg_cent > $end_cent) {
     $ico->rewind();
 
@@ -115,11 +132,35 @@ sub update($self) {
   @{$self->{prev}}=($beg_idex,$beg_cent);
 
   $self->{stop}=
-     ($beg_cent <= $end_cent + 0.001)
-  && ($beg_cent >= $end_cent - 0.001)
+     ($beg_cent <= $end_cent + 0.1)
+  && ($beg_cent >= $end_cent - 0.1)
   ;
 
+
+SKIP:
+
   return $self->get_cframe();
+
+};
+
+# ---   *   ---   *   ---
+# ^adjusts playback rate
+# accto beg-end diff
+
+sub update_rate($self) {
+
+  my ($beg_idex,$beg_cent)=@{$self->{prev}};
+  my ($end_idex,$end_cent)=$self->get_cent();
+
+  my $rate=abs($beg_cent-$end_cent);
+     $rate=max(2,min($rate,8));
+
+  map {
+    $ARG->set_rate(16-$rate);
+
+  } @{$self->{animar}};
+
+  $self->{stop}=0;
 
 };
 
@@ -129,7 +170,7 @@ sub update($self) {
 sub update_instant($self) {
 
   my $ar    = $self->{animar};
-  my $limit = $self->{cnt}-1;
+  my $limit = $self->{attr}->{total}-1;
 
   my ($idex,$cent)=$self->get_cent();
   @{$self->{prev}}=($idex,$cent);
@@ -167,37 +208,41 @@ sub update_instant($self) {
 };
 
 # ---   *   ---   *   ---
-# ^cats all icons together
+# ^cats all icons ogether
 
 sub get_cframe($self) {
 
   my $ar    = $self->{animar};
-  my $total = $self->{cnt};
+  my $total = $self->{attr}->{total};
 
-  my $step  = ($total > 8)
-    ? int($total/2)
+  my $half  = ($total >= 8)
+    ? int_urdiv($total,2)-1
+    : 3
+    ;
+
+  my $step  = ($total > 4)
+    ? $half
     : $total
     ;
 
   my $beg   = 0;
   my $end   = $step;
-  my $cnt   = int_urdiv($total,$step);
 
   return map {
 
-    $end=min($total-1,$end);
+    $end=min($end,$total-1);
 
     my @line=(@$ar)[$beg..$end];
 
-    $beg+=$step+1;
-    $end+=$step+1;
+    $beg+=$ARG+1;
+    $end+=$ARG+1;
 
     join $NULLSTR,map {
       $ARG->{cchar}
 
     } @line;
 
-  } 0..$cnt-1;
+  } ($step,$step);
 
 };
 
@@ -206,29 +251,20 @@ sub get_cframe($self) {
 
 sub get_cent($self) {
 
-  my $cur   = $self->{max} - $self->{cur};
-  my $limit = $self->{cnt}-1;
+  my $attr  = $self->{attr};
 
-  my $cent  = $self->{cnt};
-     $cent *= $cur / $self->{max};
+  my $cur   = $attr->{i} * $self->{scale};
+  my $max   = $attr->{total} * $self->{scale};
+
+  my $limit = $self->{attr}->{total}-1;
+
+  my $cent  = $self->{attr}->{total};
+     $cent *= ($max - $cur) / $max;
 
   my $idex  = int($cent);
      $idex  = max(0,min($idex,$limit));
 
   return ($idex,$cent);
-
-};
-
-# ---   *   ---   *   ---
-# reduce current
-
-sub damage($self,$x=1) {
-  $self->{cur} -= $x;
-  $self->{cur}  = max(min(
-    $self->{max},
-    $self->{cur}
-
-  ),0);
 
 };
 

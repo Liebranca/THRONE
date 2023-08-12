@@ -21,35 +21,58 @@
   use GF::Mode::ANSI;
 
   use lib $ENV{'ARPATH'}.'/THRONE/';
+  use RPG::Attr;
   use RPG::Bar;
 
 # ---   *   ---   *   ---
 
-my $f     = GF::Mode::ANSI->new_frame();
-
-my $x     = RPG::Bar->new(max=>100,rate=>8);
-my $color = $f->truecolor($x->{color});
-
-while(! $x->{stop}) {
-
-  $x->damage();
-
-  my @bar = $x->update();
-  my $y   = 29 - $#bar;
-
-  map {
-    print {*STDOUT} "\e[${y}H$color$ARG\e[0m";
-    $y++;
-
-  } @bar;
-
-  STDOUT->flush();
-
-  usleep(10000);
+my $obar={
+  color => 0b10000000,
+  anim  => $GF::Icon::PAIN,
 
 };
 
-say $NULLSTR;
+my $attr=RPG::Attr->new(
+
+  base   => 8,
+  curses => {
+    'Blood Curse'=>5,
+
+  },
+
+  bar   => $obar,
+
+);
+
+my $f     = GF::Mode::ANSI->new_frame();
+my $color = $f->bitcolor($obar->{color});
+
+# ---   *   ---   *   ---
+
+while($attr->{i} > 0) {
+
+  $attr->mod_current(-2);
+
+  while(! $attr->{bar}->{stop}) {
+
+    my @bar = $attr->draw();
+    my $y   = 29 - $#bar;
+
+    map {
+      print {*STDOUT} "\e[${y}H$color$ARG\e[0m";
+      $y++;
+
+    } @bar;
+
+    STDOUT->flush();
+
+    usleep(10000);
+
+  };
+
+};
+
+say "\n\nYOU DIED";
 
 
 # ---   *   ---   *   ---
