@@ -24,6 +24,7 @@ package RPG::Spell;
 
   use lib $ENV{'ARPATH'}.'/THRONE/';
   use RPG::Dice;
+  use RPG::Magic;
 
   use lib $ENV{'ARPATH'}.'/lib/sys';
   use Style;
@@ -41,27 +42,31 @@ package RPG::Spell;
 
   sub Frame_Vars($class) {return {
 
-    -autoload=>[qw(
-      neww
-
-    )],
+    -autoload=>[qw()],
 
   }};
 
   Readonly our $DEFAULTS=>{
 
     # id
-    name    => 'Transfigurate',
-    school  => 'Raw Lytheknics',
+    name   => 'Transfigurate',
+    school => 'Raw Lytheknics',
 
     # score
-    degree  => 3,
-    elems   => [],
-    reqs    => [],
-    rolls   => [qw(1d8)],
+    degree => 3,
+
+    area   => 0,
+    range  => 0,
+    dur    => 1,
+
+    elems  => [],
+    eff    => [],
+    reqs   => [],
+
+    dice   => '1d4',
 
     # lore
-    desc    => (join q[ ],qw(
+    desc   => (join q[ ],qw(
 
       This vociferation
       shall endlessly
@@ -69,36 +74,13 @@ package RPG::Spell;
 
     )),
 
-    # modes
-    on_any=>sub ($self,$actor) {
-
-      my ($x)=$self->roll();
-
-      say
-
-        "$actor->{name} ".
-        "chants $self->{name} ".
-
-        "with a score of $x"
-
-      ;
-
-    },
-
-    on_self   => $NOOP,
-    on_touch  => $NOOP,
-    on_target => $NOOP,
-    on_area   => $NOOP,
-
-    on_ally   => $NOOP,
-    on_foe    => $NOOP,
-
   };
 
 # ---   *   ---   *   ---
 # GBL
 
-  my $Frame=RPG::Spell->get_frame();
+  my $Icemap = {};
+  my $Frame  = RPG::Spell->get_frame();
 
 # ---   *   ---   *   ---
 # IO
@@ -110,90 +92,100 @@ package RPG::Spell;
   };
 
 # ---   *   ---   *   ---
-# go through chks
-
-sub roll($self) {
-
-  my @out=();
-
-  for my $d(@{$self->{rolls}}) {
-    push @out,$d->roll();
-
-  };
-
-  return @out;
-
-};
-
-# ---   *   ---   *   ---
-
-sub cast($self,$actor) {
-
-  for my $key(qw(
-
-    on_any
-
-    on_self
-    on_touch
-    on_target
-    on_area
-
-    on_ally
-    on_foe
-
-  )) {
-
-    my $proc=$self->{$key};
-
-    $proc->($self,$actor)
-    if $proc ne $NOOP;
-
-  };
-
-};
-
-# ---   *   ---   *   ---
+# cstruc
 
 sub new($class,%O) {
 
+  # defaults
   $class->defnit(\%O);
 
-  my $rolls=$O{rolls};
-  for my $d(@$rolls) {
-    RPG::Dice->fetch(\$d);
+  # ^lis
+  my $eff=$O{eff};
 
-  };
 
+  # get dice
+  RPG::Dice->fetch(\$O{dice});
+
+
+  # get magic effects from names
+  @$eff=map {
+    RPG::Magic->fetch($ARG)
+
+  } @$eff;
+
+  # ^handle inheritance
+  unshift @$eff,map {
+    @{$class->fetch($ARG)->{eff}};
+
+  } @{$O{elems}};
+
+
+  # ^make ice
   my $self=bless {%O},$class;
+
+  # ^register
+  ! exists $Icemap->{$O{name}}
+  or RPG::Magic::throw_redecl($O{name});
+
+  $Icemap->{$O{name}}=$self;
+
 
   return $self;
 
 };
 
 # ---   *   ---   *   ---
-# test
+# ^get existing
 
-my $lw=RPG::Spell->new(
+sub fetch($class,$name) {
 
-  name    => 'Last whisper',
-  school  => 'Hatred',
+  my $out=$Icemap->{$name}
+  or RPG::Magic::throw_no_ice($name);
 
-  elems   => [qw(evil annihilate sight)],
-  reqs    => [qw(blackened disciple)],
+  return $out;
 
-  desc    => (join q[ ],qw(
+};
 
-    This vociferation reveals the
-    positions of enemies and grants
-    1d8 of bonus damage for the next
-    three attacks
+# ---   *   ---   *   ---
+# ^bat
 
-  )),
+sub table($class,@ar) {
 
-);
+  return {map {
+    $ARG=>$class->fetch($ARG)
 
-my $A={name=>'Hunter'};
-$lw->cast($A);
+  } @ar};
+
+};
+
+# ---   *   ---   *   ---
+# unleash arcana
+
+sub cast($self,$dst,$src) {
+
+  # make struc out of cast
+  my $M=RPG::Magic->charge(
+
+    $self,
+
+    $dst,
+    $src,
+
+    $self->{dice}->roll()
+
+  );
+
+  # ^pass struc through each effect
+  map {
+    $ARG->{crux}->($ARG,$M);
+    push @{$M->{prev}},$ARG;
+
+  } @{$self->{eff}};
+
+
+  return $M;
+
+};
 
 # ---   *   ---   *   ---
 1; # ret

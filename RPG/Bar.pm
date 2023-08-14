@@ -71,6 +71,62 @@ sub new($class,$attr,%O) {
 };
 
 # ---   *   ---   *   ---
+# get draw command
+
+sub draw($self,%O) {
+
+  # defaults
+  $O{pos} //= [0,0];
+
+  # ^lis
+  my $co = $O{pos};
+  my $y  = $co->[1];
+
+  $O{height} //= \$y;
+
+  # filter out empty lines
+  my $long  = 0;
+  my @lines = grep {
+
+    my $l=length $ARG;
+    $long=max($long,$l);
+
+    $l > 0
+
+  } $self->update();
+
+  # ^make cmds for each line
+  my @cmd=map {
+
+    {
+      proc => 'mvcur',
+      args => [$co->[0],$y++],
+
+    },{
+
+      proc => 'bitcolor',
+      args => [$self->{color}],
+
+      ct   => $ARG,
+
+    },{
+
+      proc => 'bnw',
+
+    }
+
+  } @lines;
+
+
+  # adjust next write and give
+  $co->[0]      += $long+1;
+  ${$O{height}}  = $y;
+
+  return @cmd;
+
+};
+
+# ---   *   ---   *   ---
 # syncs anim array to attr
 
 sub update_animar($self,$set=undef) {

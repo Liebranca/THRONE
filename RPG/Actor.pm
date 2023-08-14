@@ -27,8 +27,11 @@ package RPG::Actor;
   use Chk;
 
   use lib $ENV{'ARPATH'}.'/lib/';
+  use GF::Icon;
+
   use lib $ENV{'ARPATH'}.'/THRONE/';
 
+  use RPG::Attr;
   use RPG::Space;
   use RPG::Social;
 
@@ -37,7 +40,7 @@ package RPG::Actor;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.3;#b
+  our $VERSION = v0.00.4;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -62,7 +65,16 @@ sub new($class,%O) {
   # defaults
   $O{name}   //= 'Vagabond';
   $O{social} //= {};
+  $O{attrs}  //= {};
+  $O{grim}   //= [];
 
+  # basic attrs are builtin
+  # they must be as they are
+  # integral to the system
+  $class->nit_basic_attrs($O{attrs});
+
+
+  # obj detailing 'world presence'
   my $space=RPG::Space->array(
 
     pos    => $O{pos},
@@ -75,15 +87,134 @@ sub new($class,%O) {
 
   );
 
-  # make new
+  # ^make ice
   my $self=bless {
 
     name    => $O{name},
     space   => $space,
 
+    social  => RPG::Social->new(%{$O{social}}),
+    attrs   => RPG::Attr->table($O{attrs}),
+
+    grim    => RPG::Spell->table(@{$O{grim}}),
+
   },$class;
 
+
   return $self;
+
+};
+
+# ---   *   ---   *   ---
+# initializes basic attributes
+# if they are not present
+
+sub nit_basic_attrs($class,$attrs) {
+
+  state $hp_bar={
+    color => 0b10000000,
+    anim  => $GF::Icon::HEART,
+
+  };
+
+  state $mp_bar={
+    color => 0b00001111,
+    anim  => $GF::Icon::MANA,
+
+  };
+
+  state $ap_bar={
+    color => 0b00010000,
+    anim  => $GF::Icon::TASK,
+
+  };
+
+  $attrs->{hp}         //= {};
+  $attrs->{hp}->{base} //= 8;
+
+  $attrs->{mp}         //= {};
+  $attrs->{mp}->{base} //= 3;
+
+  $attrs->{ap}         //= {};
+  $attrs->{ap}->{base} //= 1;
+
+  $attrs->{hp}->{bar}=$hp_bar;
+  $attrs->{mp}->{bar}=$mp_bar;
+  $attrs->{ap}->{bar}=$ap_bar;
+
+};
+
+# ---   *   ---   *   ---
+# actor has HP left
+
+sub alive($self) {
+  my $attr=$self->{attrs}->{hp};
+  return $attr->{i} > 0;
+
+};
+
+# ---   *   ---   *   ---
+# gives draw commands for
+# name and basic stats
+
+sub draw_bars($self,%O) {
+
+  # defaults
+  $O{pos}       //= [0,0];
+  $O{show_name} //= 1;
+
+  # ^lis
+  my $co=$O{pos};
+
+
+  my @out    = ();
+  my ($x,$y) = @$co;
+
+  # optionally display actor name
+  if($O{show_name}) {
+
+    push @out,{
+
+      proc => 'mvcur',
+      args => [$co->[0],$co->[1]++],
+
+      ct   => $self->{name},
+
+    };
+
+    $co->[0]+=2;
+    $co->[1]++;
+
+  };
+
+
+  # get bars
+  my $attrs = $self->{attrs};
+  my @bars  = map {
+    $attrs->{$ARG}->{bar}
+
+  } qw(hp mp ap);
+
+  # ^get updated status for each
+  my $updated=grep {
+    ! $ARG->{stop};
+
+  } @bars;
+
+
+  # ^get draw commands for each
+  my $yref=
+  push @out,map {
+    $ARG->draw(pos=>$co,height=>\$y)
+
+  } @bars;
+
+
+  $co->[0]=$x;
+  $co->[1]=$y+2;
+
+
+  return $updated,@out;
 
 };
 
@@ -261,10 +392,12 @@ sub path_to($self,$x,$y) {
 };
 
 # ---   *   ---   *   ---
+# placeholder: behave like
+# you're not just an NPC
 
 sub social($self,$fn,@args) {
 
-  my ($ctx,$act,$feel)=$self->{persona}->$fn(@args);
+  my ($ctx,$act,$feel)=$self->{social}->$fn(@args);
 
   say "On $ctx: $self->{name} chooses $act($feel)";
 
@@ -279,6 +412,15 @@ sub touch($self,$other,@args) {
     'on_touch',$self,@args
 
   );
+
+};
+
+# ---   *   ---   *   ---
+# wraps over spell->cast(dst,src)
+
+sub cast($self,$name,$dst) {
+  my $spell=$self->{grim}->{$name};
+  return $spell->cast($dst,$self);
 
 };
 

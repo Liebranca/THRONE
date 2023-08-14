@@ -187,21 +187,7 @@ sub popc() {
 # state proc
 
 sub draw() {
-
   Inserter::draw($Cache->{cmode});
-
-  drawcmd({
-
-    proc => 'mvcur',
-    args => [0x0,0xFF],
-
-  },{
-
-    proc => $COLOR_F,
-    args => [Selector::get_color()],
-    ct   => $Icon_Test->play(fBy()),
-
-  });
 
 };
 

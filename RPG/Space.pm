@@ -43,7 +43,7 @@ package RPG::Space;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.1;#b
+  our $VERSION = v0.00.2;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -96,7 +96,7 @@ sub chardraw($s) {
 };
 
 # ---   *   ---   *   ---
-# constructor
+# cstruc
 
 sub new($class,%O) {
 
@@ -198,7 +198,7 @@ sub array($class,%O) {
 };
 
 # ---   *   ---   *   ---
-# ^errmes
+# ^sprite wastes space
 
 sub throw_small_sprite($sz) {
 
@@ -214,6 +214,7 @@ sub throw_small_sprite($sz) {
 };
 
 # ---   *   ---   *   ---
+# ^sprite doesn't fit
 
 sub throw_big_sprite($sz) {
 
@@ -480,6 +481,7 @@ sub nof($self) {
 };
 
 # ---   *   ---   *   ---
+# ^fills out surrounds
 
 sub nof_loop($self,$dst) {
 

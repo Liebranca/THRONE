@@ -37,7 +37,7 @@ package RPG::Social;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.1;#b
+  our $VERSION = v0.00.2;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -87,9 +87,11 @@ sub new($class,%O) {
   # defaults
   $O{traits} //= [qw(courage empathy)];
 
+
   # likes v dislikes
   my $pref     = [];
   my $npref    = [];
+
 
   # build action pool
   for my $t(@{$O{traits}}) {
@@ -108,6 +110,7 @@ sub new($class,%O) {
 
   };
 
+
   my $tolerance = @$pref;
 
   # preferred actions
@@ -123,7 +126,8 @@ sub new($class,%O) {
 
   } @$npref];
 
-  # make instance
+
+  # make ice
   my $self  = bless {
 
     prefers => $likes,
@@ -132,6 +136,7 @@ sub new($class,%O) {
     neutral => [],
 
   },$class;
+
 
   return $self;
 
@@ -175,8 +180,9 @@ sub feelbout($self,$act) {
   my $feel = 0;
   my %bout = $self->deref_pool();
 
+
   # add unknown act to neutral
-  if(!exists $bout{$act}) {
+  if(! exists $bout{$act}) {
     push @{$self->{neutral}},$act=>$feel;
 
   # ^use existing
@@ -184,6 +190,7 @@ sub feelbout($self,$act) {
     $feel=$bout{$act};
 
   };
+
 
   return $feel;
 
@@ -197,13 +204,17 @@ sub array_feelbout($self,@opts) {
   my @feels = ();
   my %bout  = $self->deref_pool();
 
+
+  # walk options
   for my $act(@opts) {
 
     my $feel=0;
 
-    if(!exists $bout{$act}) {
+    # add unknown act to neutral
+    if(! exists $bout{$act}) {
       push @{$self->{neutral}},$act=>$feel;
 
+    # ^use existing
     } else {
       $feel=$bout{$act};
 
@@ -212,6 +223,7 @@ sub array_feelbout($self,@opts) {
     push @feels,$feel;
 
   };
+
 
   return @feels;
 
@@ -228,6 +240,7 @@ sub behave($self,@opts) {
   my $good  = grep {$ARG >=  1} @feels;
   my $meh   = grep {$ARG ==  0} @feels;
 
+
   # most preferred out of avail
   if($good) {
     $pool=$self->{prefers};
@@ -242,12 +255,14 @@ sub behave($self,@opts) {
 
   };
 
+
   # fetch action
   my $ar  = lfind(\@opts,$pool);
-  my $act = (!$good && $meh)
+  my $act = (! $good && $meh)
     ? RPG::Dice->pick(@$ar)
     : shift @$ar
     ;
+
 
   return $act=>$self->feelbout($act);
 

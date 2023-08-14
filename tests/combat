@@ -21,59 +21,145 @@
   use GF::Mode::ANSI;
 
   use lib $ENV{'ARPATH'}.'/THRONE/';
-  use RPG::Attr;
-  use RPG::Bar;
+
+  use RPG::Cell;
+  use RPG::Actor;
+  use RPG::Magic;
+  use RPG::Spell;
 
 # ---   *   ---   *   ---
+# create effect
 
-my $obar={
-  color => 0b10000000,
-  anim  => $GF::Icon::PAIN,
+sub damage($self,$M) {
+
+  my $dmg   = $M->{mag}/2.55;
+
+  my $attrs = $M->{dst}->{attrs};
+  my $key   = $self->key();
+
+  $attrs->{$key}->mod_current(-$dmg);
 
 };
 
-my $attr=RPG::Attr->new(
+# ---   *   ---   *   ---
+# ^add to table
 
-  base   => 8,
-  curses => {
-    'Blood Curse'=>5,
+RPG::Magic->new(
+
+  'Attack' => \&damage,
+
+  tab=>{
+    key=>'hp',
 
   },
 
-  bar   => $obar,
+);
+
+# ---   *   ---   *   ---
+# ^fill out the grimoire
+
+RPG::Spell->new(
+
+  name   => 'Slash',
+  school => 'Martial',
+
+  degree => 0,
+  eff    => ['Attack'],
+
+  desc   => 'Cuts your target!'
 
 );
 
-my $f     = GF::Mode::ANSI->new_frame();
-my $color = $f->bitcolor($obar->{color});
+# ---   *   ---   *   ---
+# make map
+
+my $arena=RPG::Cell->new(
+
+  'imp_arena_00',
+
+  name => 'The Imperium Arena',
+  co   => [0,0],
+
+);
 
 # ---   *   ---   *   ---
+# make dude
 
-while($attr->{i} > 0) {
+my $jack=RPG::Actor->new(
 
-  $attr->mod_current(-2);
+  name => 'Jack',
 
-  while(! $attr->{bar}->{stop}) {
+  cell => $arena,
+  pos  => [0,0],
 
-    my @bar = $attr->draw();
-    my $y   = 29 - $#bar;
+  grim => ['Slash'],
+
+);
+
+my $jane=RPG::Actor->new(
+
+  name => 'Jane',
+
+  cell => $arena,
+  pos  => [2,3],
+
+  grim => ['Slash'],
+
+);
+
+# ---   *   ---   *   ---
+# switchable viewpoints
+
+my $other = $jack;
+my $self  = $jane;
+
+# ---   *   ---   *   ---
+# test
+
+my $f=GF::Mode::ANSI->new_frame();
+
+while($self->alive() && $other->alive()) {
+
+  $self->cast('Slash',$other);
+
+  print
+    "\e[0H",
+    "$self->{name} attacks $other->{name}!"
+
+  ;
+
+  while(1) {
+
+    my $co     = [0,3];
+    my $redraw = 0;
 
     map {
-      print {*STDOUT} "\e[${y}H$color$ARG\e[0m";
-      $y++;
 
-    } @bar;
+      my ($updated,@cmd)=$ARG->draw_bars(pos=>$co);
 
-    STDOUT->flush();
+      $redraw|=$updated;
+      $f->req(@cmd);
 
-    usleep(10000);
+    } ($jane,$jack);
+
+    $f->draw();
+    usleep(1000);
+
+    last if ! $redraw;
 
   };
 
+  ($self,$other)=($other,$self);
+
 };
 
-say "\n\nYOU DIED";
+say "\n\n";
 
+my ($victor)=grep {$ARG->alive()} ($jane,$jack);
+my ($defeat)=grep {! $ARG->alive()} ($jane,$jack);
+
+say "$defeat->{name} died an inglorious death!";
+say "$victor->{name} is victorious!";
 
 # ---   *   ---   *   ---
 1; # ret
