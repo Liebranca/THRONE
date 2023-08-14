@@ -77,6 +77,7 @@ sub draw($self,%O) {
 
   # defaults
   $O{pos} //= [0,0];
+  $O{imm} //= 0;
 
   # ^lis
   my $co = $O{pos};
@@ -86,6 +87,11 @@ sub draw($self,%O) {
 
   # filter out empty lines
   my $long  = 0;
+  my $fn    = ($O{imm})
+    ? 'update_instant'
+    : 'update'
+    ;
+
   my @lines = grep {
 
     my $l=length $ARG;
@@ -93,7 +99,7 @@ sub draw($self,%O) {
 
     $l > 0
 
-  } $self->update();
+  } $self->$fn();
 
   # ^make cmds for each line
   my @cmd=map {
@@ -169,21 +175,28 @@ sub update($self) {
 
   # run anim for this frame
   if($beg_cent < $end_cent) {
+
     $ico->play_stop();
+
+    $beg_cent=$beg_idex+(
+      $ico->{i}/$ico->{len}
+
+    );
 
   # ^backwards when healing
   } elsif($beg_cent > $end_cent) {
+
     $ico->rewind();
+
+    my $step  = $ico->{i}/$ico->{len};
+       $step -= 0.1*$step==0;
+
+    $beg_cent=$beg_idex+$step;
 
   };
 
 
   # ^adjust current
-  $beg_cent=$beg_idex+(
-    $ico->{i}/$ico->{len}
-
-  );
-
   $beg_idex=max(0,min(int($beg_cent),$limit));
   @{$self->{prev}}=($beg_idex,$beg_cent);
 
@@ -191,7 +204,6 @@ sub update($self) {
      ($beg_cent <= $end_cent + 0.1)
   && ($beg_cent >= $end_cent - 0.1)
   ;
-
 
 SKIP:
 

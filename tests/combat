@@ -28,11 +28,11 @@
   use RPG::Spell;
 
 # ---   *   ---   *   ---
-# create effect
+# create effects
 
 sub damage($self,$M) {
 
-  my $dmg   = $M->{mag}/2.55;
+  my $dmg   = $M->{mag}/2;
 
   my $attrs = $M->{dst}->{attrs};
   my $key   = $self->key();
@@ -41,12 +41,97 @@ sub damage($self,$M) {
 
 };
 
+sub _bless($self,$M) {
+  $M->{mag}+=$M->{mag}/2;
+
+};
+
+sub evil($self,$M) {
+
+  my $dice = $M->{spell}->{dice};
+
+  my $dst  = $M->{dst};
+  my $mag  = $M->{mag};
+
+  $M->{mag} = 2/$mag;
+  $M->{dst} = $M->{src};
+
+  damage($self,$M);
+
+  $M->{mag} = $mag * 1.5;
+  $M->{dst} = $dst;
+
+};
+
+sub poison($self,$M) {
+
+  my $spell = $M->{spell};
+  my $dst   = $M->{dst};
+  my $mag   = $M->{mag};
+
+  my $first =! exists $M->{dur};
+
+  $M->{dur} //= $spell->{dur}+1;
+
+
+  $dst->{eff}->add(\&poison,$self,$M)
+  if 0 < $M->{dur}--;
+
+  if(! $first) {
+
+    $M->{mag}=$mag/2;
+    damage($self,$M);
+
+    print
+
+      "\e[0H\e[0K$M->{dst}->{name} takes "
+    . ($M->{mag}/2) . ' '
+
+    . " poison damage!"
+
+    ;
+
+    $mag+=$M->{mag}*0.25;
+
+  };
+
+  $M->{mag}=$mag;
+
+};
+
 # ---   *   ---   *   ---
 # ^add to table
 
 RPG::Magic->new(
 
-  'Attack' => \&damage,
+  'attack' => \&damage,
+
+  tab=>{
+    key=>'hp',
+
+  },
+
+);
+
+RPG::Magic->new(
+  'bless' => \&_bless,
+
+);
+
+RPG::Magic->new(
+
+  'evil' => \&evil,
+
+  tab=>{
+    key=>'hp',
+
+  },
+
+);
+
+RPG::Magic->new(
+
+  'poison' => \&poison,
 
   tab=>{
     key=>'hp',
@@ -61,12 +146,62 @@ RPG::Magic->new(
 RPG::Spell->new(
 
   name   => 'Slash',
-  school => 'Martial',
+  school => 'Combat',
 
   degree => 0,
-  eff    => ['Attack'],
+  eff    => ['attack'],
 
   desc   => 'Cuts your target!'
+
+);
+
+RPG::Spell->new(
+
+  name   => 'Snake Venom',
+  school => 'Night',
+
+  degree => 3,
+  dur    => 2,
+
+  eff    => ['evil','poison','attack'],
+
+  desc   => 'Damages the enemy over time',
+
+);
+
+RPG::Spell->new(
+
+  name   => 'Smite',
+  schhol => 'Faith',
+
+  degree => 2,
+  eff    => ['bless','bless','attack'],
+
+  desc   => 'Doubly righteous attack',
+
+);
+
+RPG::Spell->new(
+
+  name   => 'Holy Slash',
+  school => 'Faith',
+
+  degree => 1,
+  eff    => ['bless','attack'],
+
+  desc   => 'Cuts your target -- righteously!'
+
+);
+
+RPG::Spell->new(
+
+  name   => 'Unholy Slash',
+  school => 'Faith',
+
+  degree => 2,
+  eff    => ['bless','evil','attack'],
+
+  desc   => 'Cuts your target -- maliciously!'
 
 );
 
@@ -92,7 +227,7 @@ my $jack=RPG::Actor->new(
   cell => $arena,
   pos  => [0,0],
 
-  grim => ['Slash'],
+  grim => ['Slash','Holy Slash','Smite'],
 
 );
 
@@ -103,7 +238,7 @@ my $jane=RPG::Actor->new(
   cell => $arena,
   pos  => [2,3],
 
-  grim => ['Slash'],
+  grim => ['Slash','Unholy Slash','Snake Venom'],
 
 );
 
@@ -114,19 +249,11 @@ my $other = $jack;
 my $self  = $jane;
 
 # ---   *   ---   *   ---
-# test
+# drawing bars
 
 my $f=GF::Mode::ANSI->new_frame();
 
-while($self->alive() && $other->alive()) {
-
-  $self->cast('Slash',$other);
-
-  print
-    "\e[0H",
-    "$self->{name} attacks $other->{name}!"
-
-  ;
+sub draw_bars(@actors) {
 
   while(1) {
 
@@ -135,31 +262,77 @@ while($self->alive() && $other->alive()) {
 
     map {
 
-      my ($updated,@cmd)=$ARG->draw_bars(pos=>$co);
+      my ($updated,@cmd)=
+        $ARG->draw_bars(pos=>$co);
 
       $redraw|=$updated;
       $f->req(@cmd);
 
-    } ($jane,$jack);
+    } @actors;
 
     $f->draw();
-    usleep(1000);
+    usleep(10000);
+
 
     last if ! $redraw;
 
   };
 
+};
+
+# ---   *   ---   *   ---
+
+while(
+
+   $self->alive()
+&& $other->alive()
+
+) {
+
+  print "\e[0H\e[0K";
+
+  my $spell=$self->take_turn() or last;
+  draw_bars($jane,$jack);
+
+
+  $self->cast($spell->{name},$other);
+
+  print
+
+    "\e[0H\e[0K"
+
+  . "$self->{name} uses "
+  . "$spell->{name} "
+
+  . "on $other->{name}!"
+
+  ;
+
+  draw_bars($jane,$jack);
+
+  usleep(20000);
   ($self,$other)=($other,$self);
 
 };
 
-say "\n\n";
+draw_bars($jane,$jack);
+say "\e[20H\e[0K";
 
-my ($victor)=grep {$ARG->alive()} ($jane,$jack);
-my ($defeat)=grep {! $ARG->alive()} ($jane,$jack);
+my @victor=grep {$ARG->alive()} ($jane,$jack);
+my @defeat=grep {! $ARG->alive()} ($jane,$jack);
 
-say "$defeat->{name} died an inglorious death!";
-say "$victor->{name} is victorious!";
+map {
+  say "$ARG->{name} died an inglorious death!"
+
+} @defeat;
+
+map {
+  say "$ARG->{name} is victorious!"
+
+} @victor;
+
+say "Everyone is dead! ASFAIMAS rejoices!"
+if ! @victor;
 
 # ---   *   ---   *   ---
 1; # ret

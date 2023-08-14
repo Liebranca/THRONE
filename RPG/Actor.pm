@@ -25,6 +25,7 @@ package RPG::Actor;
 
   use Style;
   use Chk;
+  use Queue;
 
   use lib $ENV{'ARPATH'}.'/lib/';
   use GF::Icon;
@@ -67,6 +68,7 @@ sub new($class,%O) {
   $O{social} //= {};
   $O{attrs}  //= {};
   $O{grim}   //= [];
+  $O{eff}    //= Queue->nit();
 
   # basic attrs are builtin
   # they must be as they are
@@ -97,6 +99,7 @@ sub new($class,%O) {
     attrs   => RPG::Attr->table($O{attrs}),
 
     grim    => RPG::Spell->table(@{$O{grim}}),
+    eff     => $O{eff},
 
   },$class;
 
@@ -161,6 +164,7 @@ sub draw_bars($self,%O) {
 
   # defaults
   $O{pos}       //= [0,0];
+  $O{imm}       //= 0;
   $O{show_name} //= 1;
 
   # ^lis
@@ -195,17 +199,22 @@ sub draw_bars($self,%O) {
 
   } qw(hp mp ap);
 
-  # ^get updated status for each
-  my $updated=grep {
-    ! $ARG->{stop};
+
+  # ^get draw commands for each
+  push @out,map {
+
+    $ARG->draw(
+      pos    => $co,
+      height => \$y,
+      imm    => $O{imm}
+
+    )
 
   } @bars;
 
-
-  # ^get draw commands for each
-  my $yref=
-  push @out,map {
-    $ARG->draw(pos=>$co,height=>\$y)
+  # ^get updated status for each
+  my $updated=grep {
+    ! $ARG->{stop};
 
   } @bars;
 
@@ -416,10 +425,83 @@ sub touch($self,$other,@args) {
 };
 
 # ---   *   ---   *   ---
+# give list of avail spells
+
+sub may_cast($self) {
+
+  my $mp=$self->{attrs}->{mp};
+
+  return grep {
+    $ARG->{degree} <= $mp->{i}
+
+  } values %{$self->{grim}};
+
+};
+
+# ---   *   ---   *   ---
+# select spell from avail
+
+sub pick_spell($self) {
+
+  my @avail = $self->may_cast();
+  my $out   = $avail[0];
+
+  # NOTE:
+  #
+  #   for now the only criteria is
+  #   mp cost, but an actor's persona
+  #   should eventually factor into
+  #   their strategy
+
+  map {
+    $out=$ARG if $ARG->{degree} > $out->{degree}
+
+  } @avail;
+
+
+  return $out;
+
+};
+
+# ---   *   ---   *   ---
+# recover a lick of energy
+
+sub regen($self) {
+
+  my $mp=$self->{attrs}->{mp};
+  my $ap=$self->{attrs}->{ap};
+
+  $mp->mod_current(1);
+  $ap->mod_current(1);
+
+};
+
+# ---   *   ---   *   ---
+# it's [ACTOR]'s turn!
+
+sub take_turn($self) {
+
+  $self->{eff}->immwex();
+
+  # ^chk actor hasn't died from
+  # an injury this turn
+  return undef if ! $self->alive();
+
+  $self->regen();
+  return $self->pick_spell();
+
+};
+
+# ---   *   ---   *   ---
 # wraps over spell->cast(dst,src)
 
 sub cast($self,$name,$dst) {
-  my $spell=$self->{grim}->{$name};
+
+  my $spell = $self->{grim}->{$name};
+  my $mp    = $self->{attrs}->{mp};
+
+  $mp->mod_current(-$spell->{degree});
+
   return $spell->cast($dst,$self);
 
 };
