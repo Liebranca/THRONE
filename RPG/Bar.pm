@@ -42,7 +42,7 @@ package RPG::Bar;
 sub new($class,$attr,%O) {
 
   $O{color} //= 0b10000000;
-  $O{anim}  //= $GF::Icon::PAIN;
+  $O{anim}  //= $GF::Icon::HEART;
 
 
   my $self=bless {
@@ -92,41 +92,26 @@ sub draw($self,%O) {
     : 'update'
     ;
 
-  my @lines = grep {
+  my @lines=grep {
 
     my $l=length $ARG;
     $long=max($long,$l);
 
-    $l > 0
+    $l > 0;
 
   } $self->$fn();
 
-  # ^make cmds for each line
-  my @cmd=map {
 
-    {
-      proc => 'mvcur',
-      args => [$co->[0],$y++],
-
-    },{
-
-      proc => 'bitcolor',
-      args => [$self->{color}],
-
-      ct   => $ARG,
-
-    },{
-
-      proc => 'bnw',
-
-    }
-
-  } @lines;
+  # ^get draw commands
+  my @cmd=$self->{animar}->draw($co);
 
 
   # adjust next write and give
+  ${$O{height}}  = $co->[1];
+
   $co->[0]      += $long+1;
-  ${$O{height}}  = $y;
+  $co->[1]       = $y;
+
 
   return @cmd;
 
@@ -146,10 +131,16 @@ sub update_animar($self,$set=undef) {
 
 
   # ^create array of icons
-  $self->{animar}=[map {
-    GF::Icon->new($self->{anim}),
+  my $total=$self->{attr}->{total}-1;
+  $self->{animar}=GF::Icon::Array->new(
 
-  } 0..$self->{attr}->{total}-1];
+    [map {{
+      anim  => $self->{anim},
+      color => $self->{color},
+
+    }} 0..$total]
+
+  );
 
 
   # seek to current frame
@@ -205,9 +196,10 @@ sub update($self) {
   && ($beg_cent >= $end_cent - 0.1)
   ;
 
+
 SKIP:
 
-  return $self->get_cframe();
+  return $self->{animar}->get_cframe();
 
 };
 
@@ -223,11 +215,7 @@ sub update_rate($self) {
   my $rate=abs($beg_cent-$end_cent);
      $rate=max(2,min($rate,8));
 
-  map {
-    $ARG->set_rate(16-$rate);
-
-  } @{$self->{animar}};
-
+  $self->{animar}->set_rate(16-$rate);
   $self->{stop}=0;
 
 };
@@ -249,7 +237,7 @@ sub update_instant($self) {
     my $ico=$ar->[$ARG];
     $ico->{i}=$ico->{len}-1;
 
-    $ico->get_cchar();
+    $ico->get_cframe();
 
   } 0..$idex-1 if $idex;
 
@@ -258,7 +246,7 @@ sub update_instant($self) {
     my $ico=$ar->[$ARG];
     $ico->{i}=0;
 
-    $ico->get_cchar();
+    $ico->get_cframe();
 
   } $idex+1..$limit if $idex < $limit;
 
@@ -268,49 +256,10 @@ sub update_instant($self) {
   my $ico = $ar->[$idex];
 
   $ico->{i}=$i*$ico->{len};
-  $ico->get_cchar();
+  $ico->get_cframe();
 
 
-  return $self->get_cframe();
-
-};
-
-# ---   *   ---   *   ---
-# ^cats all icons ogether
-
-sub get_cframe($self) {
-
-  my $ar    = $self->{animar};
-  my $total = $self->{attr}->{total};
-
-  my $half  = ($total >= 8)
-    ? int_urdiv($total,2)-1
-    : 3
-    ;
-
-  my $step  = ($total > 4)
-    ? $half
-    : $total
-    ;
-
-  my $beg   = 0;
-  my $end   = $step;
-
-  return map {
-
-    $end=min($end,$total-1);
-
-    my @line=(@$ar)[$beg..$end];
-
-    $beg+=$ARG+1;
-    $end+=$ARG+1;
-
-    join $NULLSTR,map {
-      $ARG->{cchar}
-
-    } @line;
-
-  } ($step,$step);
+  return $self->{animar}->get_cframe();
 
 };
 
@@ -331,6 +280,7 @@ sub get_cent($self) {
 
   my $idex  = int($cent);
      $idex  = max(0,min($idex,$limit));
+
 
   return ($idex,$cent);
 

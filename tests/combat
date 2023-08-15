@@ -17,10 +17,13 @@
   use Style;
 
   use lib $ENV{'ARPATH'}.'/lib/';
+
   use GF::Icon;
   use GF::Mode::ANSI;
 
   use lib $ENV{'ARPATH'}.'/THRONE/';
+
+  use RPG::Dice;
 
   use RPG::Cell;
   use RPG::Actor;
@@ -30,72 +33,127 @@
 # ---   *   ---   *   ---
 # create effects
 
-sub damage($self,$M) {
+sub damage($M) {
 
   my $dmg   = $M->{mag}/2;
 
   my $attrs = $M->{dst}->{attrs};
-  my $key   = $self->key();
+  my $key   = $M->{self}->key();
 
   $attrs->{$key}->mod_current(-$dmg);
 
 };
 
-sub _bless($self,$M) {
-  $M->{mag}+=$M->{mag}/2;
+sub _bless($M) {
+
+  $M->{bless_mag}//=$M->{mag};
+
+  my $dice = $M->{spell}->{dice};
+  my $mag  = $M->{bless_mag};
+
+  my $res  = $dice->{sides} * $dice->{num};
+  my $buff = 1*($mag/$res);
+
+  $M->{mag}+=$buff;
 
 };
 
-sub evil($self,$M) {
+# ---   *   ---   *   ---
+# sacrifice HP for greater power!
+
+sub evil($M) {
 
   my $dice = $M->{spell}->{dice};
 
   my $dst  = $M->{dst};
   my $mag  = $M->{mag};
 
-  $M->{mag} = 2/$mag;
+  my $res  = $dice->{sides} * $dice->{num};
+  my $dmg  = $res-($res-$mag);
+
+  $M->{mag} = 2/($dmg/$res);
   $M->{dst} = $M->{src};
 
-  damage($self,$M);
+  damage($M);
 
   $M->{mag} = $mag * 1.5;
   $M->{dst} = $dst;
 
 };
 
-sub poison($self,$M) {
+# ---   *   ---   *   ---
+# DOT
 
-  my $spell = $M->{spell};
-  my $dst   = $M->{dst};
-  my $mag   = $M->{mag};
+sub set_bar_color($dst,$key,$color) {
 
-  my $first =! exists $M->{dur};
+  my $attr = $dst->{attrs}->{$key};
+  my $old  = $attr->{bar}->{color};
 
-  $M->{dur} //= $spell->{dur}+1;
+  $attr->{bar}->{color}=$color;
+
+  return $old;
+
+};
+
+sub poison($M) {
+
+  $M->{poison_self} //= $M->{self};
+  $M->{poison_end}  //= set_bar_color(
+
+    $M->{dst},
+    $M->{self}->key(),
+
+    0b00110001,
+
+  );
+
+};
+
+# ---   *   ---   *   ---
+# ^linger
+
+sub poison_tick($M) {
+
+  $M->{poison_mag}//=$M->{mag};
+
+  my ($mag,$old)=(
+    $M->{poison_mag},
+    $M->{mag}
+
+  );
+
+  $M->{mag}=$mag/2;
+  damage($M);
+
+  print
+
+    "\e[0H\e[0K$M->{dst}->{name} takes "
+  . "$M->{mag} "
+
+  . "poison damage!"
+
+  ;
+
+  $mag+=$mag*0.25;
+
+  $M->{poison_mag} = $mag;
+  $M->{mag}        = $old;
 
 
-  $dst->{eff}->add(\&poison,$self,$M)
-  if 0 < $M->{dur}--;
+  if(1 == $M->{dur} && exists $M->{poison_end}) {
 
-  if(! $first) {
+    set_bar_color(
 
-    $M->{mag}=$mag/2;
-    damage($self,$M);
+      $M->{dst},
+      $M->{poison_self}->key(),
 
-    print
+      $M->{poison_end},
 
-      "\e[0H\e[0K$M->{dst}->{name} takes "
-    . ($M->{mag}/2) . ' '
+    );
 
-    . " poison damage!"
-
-    ;
-
-    $mag+=$M->{mag}*0.25;
+    delete $M->{poison_end};
 
   };
-
-  $M->{mag}=$mag;
 
 };
 
@@ -134,9 +192,11 @@ RPG::Magic->new(
   'poison' => \&poison,
 
   tab=>{
-    key=>'hp',
+    key  => 'hp',
 
   },
+
+  tick => \&poison_tick,
 
 );
 
@@ -151,7 +211,7 @@ RPG::Spell->new(
   degree => 0,
   eff    => ['attack'],
 
-  desc   => 'Cuts your target!'
+  desc   => 'Cuts your target!',
 
 );
 
@@ -161,11 +221,14 @@ RPG::Spell->new(
   school => 'Night',
 
   degree => 3,
-  dur    => 2,
+  dur    => 3,
 
   eff    => ['evil','poison','attack'],
 
   desc   => 'Damages the enemy over time',
+
+  anim   => [chr(0x186)],
+  color  => 0b00110001,
 
 );
 
@@ -179,6 +242,9 @@ RPG::Spell->new(
 
   desc   => 'Doubly righteous attack',
 
+  anim   => [chr(0x1D7)],
+  color  => 0xFE,
+
 );
 
 RPG::Spell->new(
@@ -189,19 +255,22 @@ RPG::Spell->new(
   degree => 1,
   eff    => ['bless','attack'],
 
-  desc   => 'Cuts your target -- righteously!'
+  desc   => 'Cuts your target -- righteously!',
 
 );
 
 RPG::Spell->new(
 
   name   => 'Unholy Slash',
-  school => 'Faith',
+  school => 'Evil',
 
   degree => 2,
   eff    => ['bless','evil','attack'],
 
-  desc   => 'Cuts your target -- maliciously!'
+  desc   => 'Cuts your target -- maliciously!',
+
+  anim   => [chr(0x1D8)],
+  color  => 0b01100011,
 
 );
 
@@ -218,7 +287,7 @@ my $arena=RPG::Cell->new(
 );
 
 # ---   *   ---   *   ---
-# make dude
+# make dudes
 
 my $jack=RPG::Actor->new(
 
@@ -245,13 +314,28 @@ my $jane=RPG::Actor->new(
 # ---   *   ---   *   ---
 # switchable viewpoints
 
-my $other = $jack;
-my $self  = $jane;
+my @actors = ($jack,$jane);
+
+my %inia   = map {
+  $ARG=>RPG::Dice->roll('1d20')
+
+} 'jack','jane';
+
+my $self  = ($inia{jack} > $inia{jane})
+  ? $jack
+  : $jane
+  ;
+
+my $other = ($self eq $jane)
+  ? $jack
+  : $jane
+  ;
 
 # ---   *   ---   *   ---
 # drawing bars
 
 my $f=GF::Mode::ANSI->new_frame();
+print $f->encur(0);
 
 sub draw_bars(@actors) {
 
@@ -281,6 +365,7 @@ sub draw_bars(@actors) {
 };
 
 # ---   *   ---   *   ---
+# simulate battle
 
 while(
 
@@ -289,7 +374,7 @@ while(
 
 ) {
 
-  print "\e[0H\e[0K";
+  print "\e[0H\e[0J";
 
   my $spell=$self->take_turn() or last;
   draw_bars($jane,$jack);
@@ -315,6 +400,12 @@ while(
 
 };
 
+# ---   *   ---   *   ---
+# ^aftermath
+
+$self->take_turn();
+$other->take_turn();
+
 draw_bars($jane,$jack);
 say "\e[20H\e[0K";
 
@@ -333,6 +424,8 @@ map {
 
 say "Everyone is dead! ASFAIMAS rejoices!"
 if ! @victor;
+
+print $f->encur(1);
 
 # ---   *   ---   *   ---
 1; # ret

@@ -19,6 +19,7 @@ package RPG::Magic;
   use strict;
   use warnings;
 
+  use Readonly;
   use English qw(-no_match_vars);
 
   use lib $ENV{'ARPATH'}.'/lib/sys/';
@@ -31,11 +32,19 @@ package RPG::Magic;
 
   use parent 'St';
 
+  use lib $ENV{'ARPATH'}.'/THRONE/';
+  use RPG::Bar;
+
 # ---   *   ---   *   ---
 # info
 
   our $VERSION = v0.00.1;#b
   our $AUTHOR  = 'IBN-3DILA';
+
+# ---   *   ---   *   ---
+# ROM
+
+  Readonly my $TICK_NOOP=>sub ($M) {};
 
 # ---   *   ---   *   ---
 # GBL
@@ -65,7 +74,7 @@ sub AUTOLOAD($self,@args) {
 
 
   return (is_coderef($fn))
-    ? $fn->($self,@args)
+    ? $fn->(@args)
     : $fn
     ;
 
@@ -77,8 +86,10 @@ sub AUTOLOAD($self,@args) {
 sub new($class,$name,$crux,%O) {
 
   # defaults
-  $O{beq}  //= [];
-  $O{tab}  //= {};
+  $O{beq}   //= [];
+  $O{tab}   //= {};
+  $O{tick}  //= $TICK_NOOP;
+
 
   # handle inheritance
   my $tab={(map {
@@ -87,13 +98,14 @@ sub new($class,$name,$crux,%O) {
 
   } @{$O{beq}}),%{$O{tab}}};
 
+  $tab->{tick}=$O{tick};
 
   # make ice
   my $self=bless {
 
-    name => $name,
-    tab  => $tab,
-    crux => $crux,
+    name  => $name,
+    tab   => $tab,
+    crux  => $crux,
 
   },$class;
 
@@ -156,10 +168,14 @@ sub throw_no_ice($name) {
 
 # ---   *   ---   *   ---
 # creates an instance of a
-# fired magical effect
+# fired group of magical effects
 
 sub charge($class,$spell,$dst,$src,$mag) {
 
+  my @eff=@{$spell->{eff}};
+
+
+  # ^ice holds spell state
   return bless {
 
     spell => $spell,
@@ -168,9 +184,27 @@ sub charge($class,$spell,$dst,$src,$mag) {
     src   => $src,
 
     mag   => $mag,
+    dur   => $spell->{dur},
+
+    ahead => [@eff],
+
+    self  => undef,
     prev  => [],
 
+
   },$class;
+
+};
+
+# ---   *   ---   *   ---
+# ^execute next effect
+
+sub get_next($M) {
+
+  $M->{self}=shift @{$M->{ahead}};
+  $M->{self}->{crux}->($M);
+
+  push @{$M->{prev}},$M->{self};
 
 };
 

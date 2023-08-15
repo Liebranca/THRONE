@@ -33,6 +33,7 @@ package RPG::Actor;
   use lib $ENV{'ARPATH'}.'/THRONE/';
 
   use RPG::Attr;
+  use RPG::Status;
   use RPG::Space;
   use RPG::Social;
 
@@ -41,7 +42,7 @@ package RPG::Actor;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.4;#b
+  our $VERSION = v0.00.5;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -68,7 +69,7 @@ sub new($class,%O) {
   $O{social} //= {};
   $O{attrs}  //= {};
   $O{grim}   //= [];
-  $O{eff}    //= Queue->nit();
+  $O{eff}    //= [];
 
   # basic attrs are builtin
   # they must be as they are
@@ -99,7 +100,7 @@ sub new($class,%O) {
     attrs   => RPG::Attr->table($O{attrs}),
 
     grim    => RPG::Spell->table(@{$O{grim}}),
-    eff     => $O{eff},
+    status  => RPG::Status->new(eff=>$O{eff}),
 
   },$class;
 
@@ -217,6 +218,10 @@ sub draw_bars($self,%O) {
     ! $ARG->{stop};
 
   } @bars;
+
+
+  # ^display status effects
+  push @out,$self->{status}->draw(pos=>$co);
 
 
   $co->[0]=$x;
@@ -481,7 +486,8 @@ sub regen($self) {
 
 sub take_turn($self) {
 
-  $self->{eff}->immwex();
+  # run status effects
+  $self->{status}->tick();
 
   # ^chk actor hasn't died from
   # an injury this turn

@@ -27,6 +27,7 @@ package RPG::Spell;
   use RPG::Magic;
 
   use lib $ENV{'ARPATH'}.'/lib/sys';
+
   use Style;
 
   use parent 'St';
@@ -34,7 +35,7 @@ package RPG::Spell;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.2;#b
+  our $VERSION = v0.00.3;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -52,18 +53,22 @@ package RPG::Spell;
     name   => 'Transfigurate',
     school => 'Raw Lytheknics',
 
+    # display
+    color  => 0x11100011,
+    anim   => ['?'],
+
     # score
     degree => 3,
 
     area   => 0,
     range  => 0,
-    dur    => 1,
+    dur    => 0,
 
     elems  => [],
     eff    => [],
     reqs   => [],
 
-    dice   => '1d4',
+    dice   => 'd4',
 
     # lore
     desc   => (join q[ ],qw(
@@ -100,12 +105,21 @@ sub new($class,%O) {
   $class->defnit(\%O);
 
   # ^lis
-  my $eff=$O{eff};
+  my $eff  = $O{eff};
+  my $dice = \$O{dice};
 
 
-  # get dice
-  RPG::Dice->fetch(\$O{dice});
+  # get level adjustments
+  my ($dur,$area,$hdie)=
+    $class->degree_rule($O{degree});
 
+
+  # ^apply
+  $O{dur}  += $dur;
+  $O{area} += $area;
+
+  $$dice="${hdie}$$dice";
+  RPG::Dice->fetch($dice);
 
   # get magic effects from names
   @$eff=map {
@@ -159,6 +173,26 @@ sub table($class,@ar) {
 };
 
 # ---   *   ---   *   ---
+# amplifies base values of
+# spell accto mana cost:
+#
+#   +1 duration for every 2nd
+#   +1 area for every 3rd
+#   +1 hit die for every 4th
+
+sub degree_rule($class,$degree) {
+
+  my $dur  = int($degree/2);
+  my $area = int($degree/3);
+
+  my $hdie = 1+int($degree/4);
+
+
+  return ($dur,$area,$hdie);
+
+};
+
+# ---   *   ---   *   ---
 # unleash arcana
 
 sub cast($self,$dst,$src) {
@@ -177,11 +211,22 @@ sub cast($self,$dst,$src) {
 
   # ^pass struc through each effect
   map {
-    $ARG->{crux}->($ARG,$M);
-    push @{$M->{prev}},$ARG;
+    $M->get_next()
 
   } @{$self->{eff}};
 
+  if($self->{dur}) {
+
+    $dst->{status}->add(
+
+      $self->{name} => $M,
+
+      color => $self->{color},
+      anim  => $self->{anim},
+
+    );
+
+  };
 
   return $M;
 
