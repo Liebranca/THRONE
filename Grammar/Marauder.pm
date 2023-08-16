@@ -114,6 +114,8 @@ BEGIN {
 
     q[roll-key]  => re_pekey('roll'),
 
+    q[io-key]    => re_pekey(qw(in out io)),
+
   };
 
 # ---   *   ---   *   ---
@@ -143,13 +145,13 @@ sub hier($self,$branch) {
   my ($type,$name)=
     $branch->leafless_values();
 
-  $branch->{value}={
+  $branch->clear();
+
+  $branch->init({
     type=>uc $type,
     name=>$name,
 
-  };
-
-  $branch->clear();
+  });
 
 };
 
@@ -158,19 +160,37 @@ sub hier($self,$branch) {
 
 sub hier_ctx($self,$branch) {
 
+  $branch->{value}=$branch->leaf_value(0);
+  $branch->clear();
+
+  $self->hier_sort($branch);
+
   my $mach  = $self->{mach};
   my $scope = $mach->{scope};
 
-  my @path  = $self->hier_run($branch);
+  my @path  = $self->hier_path($branch);
 
   $scope->decl_branch($branch,@path);
 
 };
 
 # ---   *   ---   *   ---
+# ^parent child leaves to
+# hier branch
+
+sub hier_sort($self,$branch) {
+
+  state $re=qr{^hier$};
+
+  my @lv=$branch->match_up_to($re);
+  $branch->pushlv(@lv);
+
+};
+
+# ---   *   ---   *   ---
 # ^reset scope path
 
-sub hier_run($self,$branch) {
+sub hier_path($self,$branch) {
 
   # get ctx
   my $f     = $self->{frame};
@@ -206,6 +226,78 @@ sub set_path($self) {
 };
 
 # ---   *   ---   *   ---
+# crux to blk
+
+sub hier_run($self,$branch) {
+
+  my $mach  = $self->{mach};
+  my $scope = $mach->{scope};
+
+  my @path  = $self->hier_path($branch);
+  my $lv    = $scope->haslv(@path,'IN');
+
+
+  # fetch input values
+  if(defined $lv) {
+
+    my @args  = $mach->get_args();
+       @args  = $self->deref_args(@args);
+
+    my @ptr   = $lv->leafless_values();
+
+
+    throw_overargs(@path)
+    if @ptr < @args;
+
+
+    map {
+      (shift @ptr)->{raw}=$ARG
+
+    } @args;
+
+
+  };
+
+if(defined $lv) {
+  my @ptr=$lv->leafless_values();
+  map {say $ARG->{raw}} @ptr;
+
+};
+
+};
+
+# ---   *   ---   *   ---
+# ^the fetch part
+
+sub deref_args($self,@ar) {
+
+  return map {
+    $self->deref($ARG,ptr=>1)
+
+  } @ar;
+
+};
+
+# ---   *   ---   *   ---
+# errme
+
+sub throw_overargs(@path) {
+
+  my $path=join q[::],@path;
+
+  errout(
+
+    q[Too many arguments for fcall ]
+  . q[[goodtag]:%s],
+
+    lvl  => $AR_FATAL,
+    args => [$path],
+
+  );
+
+};
+
+# ---   *   ---   *   ---
 # values within magic proc
 
   rule('~<var-key>');
@@ -216,13 +308,14 @@ sub set_path($self) {
 
 sub var($self,$branch) {
 
-  my $lv    = $branch->{leaves};
-  my $type  = $lv->[0]->leaf_value(0);
-  my $nterm = $lv->[1]->{leaves}->[0];
+  # unpack
+  my ($type,$names,$values)=
+    $self->rd_name_nterm($branch);
 
-  my ($names,$values)=
-    $self->rd_nterm_vlist($nterm);
+  $self->defnull($values,@$names);
 
+
+  # ^repack
   $branch->{value}={
 
     type   => uc $type,
@@ -234,14 +327,31 @@ sub var($self,$branch) {
 
   };
 
+
   $branch->clear();
+
+};
+
+# ---   *   ---   *   ---
+# ^defaults uninitialized
+# values to null
+
+sub defnull($self,$dst,@src) {
+
+  my $mach=$self->{mach};
+
+  map {
+    $dst->[$ARG]//=
+      $mach->null('void')
+
+  } 0..$#src;
 
 };
 
 # ---   *   ---   *   ---
 # get [names,values] from nterm
 
-sub rd_nterm_vlist($self,$lv) {
+sub rd_nterm($self,$lv) {
 
   my @eye=$PE_EYE->recurse(
 
@@ -252,57 +362,97 @@ sub rd_nterm_vlist($self,$lv) {
 
   );
 
-  my @names=map {
-    $ARG->{raw}
+  return map {[
+    map {$ARG} $ARG->branch_values()
 
-  } $eye[0]->branch_values();
-
-  my @values=(defined $eye[1])
-    ? $eye[1]->branch_values()
-    : ()
-    ;
-
-  return (\@names,\@values);
+  ]} @eye;
 
 };
 
 # ---   *   ---   *   ---
-# ^bind decls
+# ^shorthand for common pattern
+
+sub rd_name_nterm($self,$branch) {
+
+  my $lv    = $branch->{leaves};
+
+  my $name  = $lv->[0]->leaf_value(0);
+  my $nterm = $lv->[1]->{leaves}->[0];
+
+  my @nterm = (defined $nterm)
+    ? $self->rd_nterm($nterm)
+    : ()
+    ;
+
+  return ($name,@nterm);
+
+};
+
+# ---   *   ---   *   ---
+# bind decls
 
 sub var_ctx($self,$branch) {
 
+  my $st=$branch->{value};
+
+  $st->{ptr}=$self->var_bind(
+
+    $st->{names},
+    $st->{values},
+
+    $st->{type} eq 'ROM',
+
+  );
+
+};
+
+# ---   *   ---   *   ---
+# ^the binding part
+
+sub var_bind(
+
+  $self,
+
+  $names,
+  $values,
+
+  $const,
+
+  @path
+
+) {
+
+  # get ctx
   my $mach   = $self->{mach};
   my $scope  = $mach->{scope};
 
-  my $st     = $branch->{value};
-  my $ptrs   = $st->{ptrs};
-
-  my @names  = @{$st->{names}};
+  unshift @path,$scope->path();
 
 
-  # mark uninitialized
-  map {
-    $st->{values}->[$ARG]//=
-      $mach->null('void')
+  # make copies
+  my @names  = @$names;
+  my @values = @$values;
 
-  } 0..$#names;
+  # out refs to scope
+  my $out    = [];
 
 
   # ^bind decls
-  my @values=@{$st->{values}};
-
   while(@names && @values) {
 
     my $name  = shift @names;
     my $value = shift @values;
 
-    $value->{id}    = $name;
-    $value->{const} = $st->{type} eq 'ROM';
+    $value->{id}    = $name->{raw};
+    $value->{const} = $const;
 
-    my $ptr=$mach->bind($value);
-    push @$ptrs,$ptr;
+    my $ptr=$mach->bind($value,path=>\@path);
+    push @$out,$value->{id}=>$ptr;
 
   };
+
+
+  return $out;
 
 };
 
@@ -312,12 +462,12 @@ sub var_ctx($self,$branch) {
 sub var_run($self,$branch) {
 
   my $st   = $branch->{value};
-  my $ptrs = $st->{ptrs};
+  my @ptr  = array_values($st->{ptr});
 
   my @ar=map {
     $self->deref($$ARG)
 
-  } @$ptrs;
+  } @ptr;
 
 };
 
@@ -387,9 +537,222 @@ sub roll_run($self,$branch) {
 };
 
 # ---   *   ---   *   ---
+# function calls
+
+  rule('$<fcall> value opt-nterm term');
+
+# ---   *   ---   *   ---
+# ^post-parse
+
+sub fcall($self,$branch) {
+
+  my ($name,$args)=
+    $self->rd_name_nterm($branch);
+
+  $name=$name->deref();
+
+  $branch->{value}={
+    fn   => $name,
+    args => $args,
+
+  };
+
+  $branch->clear();
+
+};
+
+# ---   *   ---   *   ---
+# ^binds fptrs
+
+sub fcall_ctx($self,$branch) {
+
+  # get F is builtin
+  my $st = $branch->{value};
+  my $fn = codefind(ref $self,$st->{fn});
+
+
+  # ^nope, lookup user-defined F
+  if(! $fn) {
+
+    my $f    = $self->{frame};
+    my $path = "$f->{-chier_t}\::$st->{fn}";
+
+    $fn=sub (@args) {
+      $self->run_branch($path,@args);
+
+    };
+
+  };
+
+  # ^bind
+  $st->{fn}=$fn;
+
+};
+
+# ---   *   ---   *   ---
+# ^runs bound F
+
+sub fcall_run($self,$branch) {
+
+  my $st  = $branch->{value};
+  my $fn  = $st->{fn};
+
+  # fetch arg values
+  my @args=$self->deref_args(
+    @{$st->{args}},
+    $self->{mach}->get_args()
+
+  );
+
+  # ^call
+  $fn->(@args);
+
+};
+
+# ---   *   ---   *   ---
+# ^test call
+
+sub test($sum) {
+  say ">>$sum";
+
+};
+
+# ---   *   ---   *   ---
+# IO
+
+  rule('~<io-key>');
+  rule('$<io> io-key nterm term');
+
+# ---   *   ---   *   ---
+# ^post-parse
+
+sub io($self,$branch) {
+
+  # unpack
+  my ($type,$names,$values)=
+    $self->rd_name_nterm($branch);
+
+  $self->defnull($values,@$names);
+  $type=uc $type;
+
+
+  # make [name=>value] pairs
+  my @fmat=map {
+    (shift @$names) => (shift @$values)
+
+  } 0..@$names-1;
+
+  my $st={
+    input  => [],
+    output => [],
+
+  };
+
+
+  # defines input format
+  if($type eq 'IN') {
+    $st->{input}=\@fmat;
+
+  # ^output format
+  } elsif($type eq 'OUT') {
+    $st->{output}=\@fmat;
+
+
+  # ^both, beq from F
+  } else {
+    nyi('BEQ IO FROM F');
+
+  };
+
+
+  # ^repack
+  $branch->clear();
+  $branch->init($st);
+
+};
+
+# ---   *   ---   *   ---
+# ^merge and bind
+
+sub io_ctx($self,$branch) {
+
+  $self->io_merge($branch);
+
+  # ^get merged struc
+  my $st     = $branch->{value};
+
+  my $input  = $st->{input};
+  my $output = $st->{output};
+
+  # ^force defaults
+  $st->{iptr}=[];
+  $st->{optr}=[];
+
+
+  # ^bind inputs
+  $st->{iptr}=$self->var_bind(
+
+    [array_keys($input)],
+    [array_values($input)],
+
+    0,
+
+    'IN',
+
+  ) if @$input;
+
+
+  # ^bind outputs
+  $st->{optr}=$self->var_bind(
+
+    [array_keys($output)],
+    [array_values($output)],
+
+    0,
+
+    'OUT',
+
+  ) if @$output;
+
+};
+
+# ---   *   ---   *   ---
+# ^the merge part
+
+sub io_merge($self,$branch) {
+
+  state $re=qr{^io$};
+
+  # get all IO branches
+  my $par = $branch->{parent};
+  my @lv  = $par->branches_in($re);
+
+
+  # ^merge values
+  my @st  = map {$ARG->leaf_value(0)} @lv;
+
+  my @in  = map {@{$ARG->{input}}} @st;
+  my @out = map {@{$ARG->{output}}} @st;
+
+  $branch->{value}={
+    input  => \@in,
+    output => \@out,
+
+  };
+
+
+  # ^pluck all but first
+  my @filt=grep {$ARG ne $branch} @lv;
+  $par->pluck(@filt);
+
+  $branch->clear();
+
+};
+
+# ---   *   ---   *   ---
 # make parser tree
 
-  our @CORE=qw(lcom hier var roll);
+  our @CORE=qw(lcom hier io var roll fcall);
 
 };
 
@@ -400,13 +763,20 @@ my $prog=q[
 
 rune hail;
 
+  in   X    0;
+
   roll base 1d4;
   var  sum  base+2;
+
+  test sum;
+
+rune fire;
+  hail;
 
 ];
 
 my $ice=Grammar::Marauder->parse($prog);
-$ice->{p3}->prich();
+$ice->run_branch('RUNE::fire');
 
 # ---   *   ---   *   ---
 1; # ret
