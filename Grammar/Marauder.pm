@@ -33,16 +33,17 @@ package Grammar::Marauder;
   use Arstd::String;
   use Arstd::Re;
   use Arstd::IO;
+  use Arstd::PM;
 
   use Tree::Grammar;
 
-  use lib $ENV{'ARPATH'}.'/avtomat/hacks/';
-  use Shwl;
+  use lib $ENV{'ARPATH'}.'/lib/';
 
-  use lib $ENV{'ARPATH'}.'/avtomat/';
-
-  use Lang;
   use Grammar;
+
+  use Grammar::peso::common;
+  use Grammar::peso::value;
+  use Grammar::peso::eye;
 
   use lib $ENV{'ARPATH'}.'/THRONE/';
   use RPG::Dice;
@@ -50,7 +51,7 @@ package Grammar::Marauder;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.1;#b
+  our $VERSION = v0.00.2;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -58,394 +59,354 @@ package Grammar::Marauder;
 
 BEGIN {
 
+  # class attrs
   sub Frame_Vars($class) { return {
 
     %{Grammar->Frame_Vars()},
-    -passes => ['_ctx','_opz','_run'],
+
+    -passes  => ['_ctx','_walk','_run'],
+
+    -chier_t => undef,
+    -chier_n => undef,
 
   }};
 
+  sub Shared_FVars($self) { return {
+    %{Grammar::peso::eye::Shared_FVars($self)},
+
+  }};
+
+
+  # inherits from
+  submerge(
+
+    [qw(
+
+      Grammar::peso::common
+      Grammar::peso::value
+      Grammar::peso::ops
+
+    )],
+
+    xdeps=>1,
+    subex=>qr{^throw_},
+
+  );
+
 # ---   *   ---   *   ---
+# GBL
 
   our $REGEX={
 
-    term => qr{(?: \n|\s|;\s*|$)},
+    %{$PE_VALUE->get_retab()},
 
-    name => qr{([\w][\w\-]*)},
-    dice => $RPG::Dice::IRE,
+    dice=>$RPG::Dice::IRE,
 
-    ncolon => qr{[^:]+},
+    q[hier-key] => re_pekey(qw(
+      rune spell
 
-    degree => re_eiths(
+    )),
 
-      [qw(
+    q[var-key]  => re_pekey(qw(
+      var rom
 
-        '   "   ^
-        ^'  ^"  *
-        *'  *"  *^
+    )),
 
-        *^' *^" **
-
-      )],
-
-      escape=>1
-
-    ),
-
-#    mode => re_eiths(
-#
-#      [qw(
-#
-#        self touch target
-#
-#      )],
-#
-#      insens=>1
-#
-#    ),
-
-    q[list-item] => qr{(?<! [>\\])\*}x,
-    q[nlist-item] => qr{
-
-      ( >\* | \\ \* | [^;*] )+
-
-    }x,
-
-    q[attr-token] => qr{
-
-      (?: \[ (?<calc> (.?)+ ) \])
-    | (?<item> [^\s]+)
-
-    }x,
+    q[roll-key]  => re_pekey('roll'),
 
   };
 
 # ---   *   ---   *   ---
-# detecting lists
+# rule imports
 
-  rule('~<list-item>');
-  rule('~<nlist-item>');
-  rule('$<attr> list-item nlist-item');
+  ext_rules(
 
-  rule('+<attr-list> attr');
+    $PE_COMMON,qw(
+
+    lcom term nterm opt-nterm
+
+  ));
+
+  ext_rules($PE_VALUE,qw(bare value));
+
+# ---   *   ---   *   ---
+# hierarchicals
+
+  rule('~<hier-key>');
+  rule('$<hier> hier-key nterm term');
 
 # ---   *   ---   *   ---
 # ^post-parse
 
-sub attr($self,$branch) {
+sub hier($self,$branch) {
 
-  my $st=$branch->bhash();
+  my ($type,$name)=
+    $branch->leafless_values();
+
+  $branch->{value}={
+    type=>uc $type,
+    name=>$name,
+
+  };
+
   $branch->clear();
 
-  strip(\$st->{q[nlist-item]});
+};
 
-  my $v=$st->{q[nlist-item]};
-  $self->attr_tok($branch,\$v);
+# ---   *   ---   *   ---
+# ^decl scope path
+
+sub hier_ctx($self,$branch) {
+
+  my $mach  = $self->{mach};
+  my $scope = $mach->{scope};
+
+  my @path  = $self->hier_run($branch);
+
+  $scope->decl_branch($branch,@path);
 
 };
 
 # ---   *   ---   *   ---
-# ^helper
+# ^reset scope path
 
-sub attr_tok($self,$dst,$vref) {
+sub hier_run($self,$branch) {
 
-  state $re     = $REGEX->{q[attr-token]};
-  my    $anchor = $dst;
+  # get ctx
+  my $f     = $self->{frame};
+  my $st    = $branch->{value};
 
-  # tokenize line
-  while($$vref=~ s[$re][]) {
+  # ^set current scope path
+  $f->{-chier_t}=$st->{type};
+  $f->{-chier_n}=$st->{name};
 
-    my $tok;
-
-    # recurse
-    if($+{calc}) {
-
-      $tok=$+{calc};
-
-      my $branch=$anchor->{leaves}->[-1];
-      $branch//=$anchor;
-
-      $self->attr_tok($branch,\$tok);
-
-    # common token
-    } else {
-
-      $tok=$+{item};
-      my $branch=$anchor->init($tok);
-
-      if($tok=~ m{\[}) {
-
-        $anchor=$branch;
-        $anchor->{value}='$[]';
-
-      } elsif($tok=~ m{\]}) {
-        $anchor=$anchor->{parent};
-        $branch->{parent}->pluck($branch);
-
-      };
-
-    };
-
-    say $tok;
-
-  };
+  return $self->set_path();
 
 };
 
 # ---   *   ---   *   ---
-# context pass
+# ^uses framevars to set path
 
-sub attr_ctx($self,$branch) {
+sub set_path($self) {
 
-  my $st=$self->attr_rd($branch);
+  my $f     = $self->{frame};
+  my $mach  = $self->{mach};
+  my $scope = $mach->{scope};
 
-  $branch->clear();
-  $branch->{value}=$st;
+  my @path=(
+    $f->{-chier_t},
+    $f->{-chier_n},
 
-};
+  );
 
-# ---   *   ---   *   ---
-# ^read helper
+  $scope->path(@path);
 
-sub attr_rd($self,$branch) {
-
-  my $st={
-
-    call => $NULLSTR,
-
-    argc => 0,
-    argv => [],
-
-    ltok => $NULLSTR,
-    tree => [],
-
-  };
-
-  my @pending=@{$branch->{leaves}};
-
-  for my $leaf(@pending) {
-
-    my $tok = $leaf->{value};
-    my @lv  = @{$leaf->{leaves}};
-
-    # recurse
-    push @{$st->{tree}},
-      $self->attr_rd($leaf)
-
-    if @lv;
-
-    # handle iv-call
-    if($tok eq '->*') {
-      push @{$st->{argv}},$st->{call};
-      $st->{call}=$NULLSTR;
-
-    } elsif(! $st->{call}) {
-      $st->{call}=$tok;
-
-    } else {
-      push @{$st->{argv}},$tok;
-
-    };
-
-    $st->{ltok}=$tok;
-
-  };
-
-  return $st;
+  return @path;
 
 };
 
 # ---   *   ---   *   ---
-# ^start of list
+# values within magic proc
 
-  rule('%<colon=:>');
-  rule('~<ncolon>');
-
-  rule(q[
-
-    $<attr-name>
-    &attr_name
-
-    ncolon colon
-
-  ]);
+  rule('~<var-key>');
+  rule('$<var> var-key nterm term');
 
 # ---   *   ---   *   ---
 # ^post parse
 
-sub attr_name($self,$branch) {
+sub var($self,$branch) {
 
-  my $st=$branch->bhash();
+  my $lv    = $branch->{leaves};
+  my $type  = $lv->[0]->leaf_value(0);
+  my $nterm = $lv->[1]->{leaves}->[0];
 
-  $branch->clear();
-  $branch->{value}="$st->{ncolon}";
+  my ($names,$values)=
+    $self->rd_nterm_vlist($nterm);
 
-};
+  $branch->{value}={
 
-# ---   *   ---   *   ---
-# combo
+    type   => uc $type,
 
-  rule(q[
+    names  => $names,
+    values => $values,
 
-    $<spell-def>
-    &spell_def
+    ptrs   => [],
 
-    attr-name attr-list
-
-  ]);
-
-# ---   *   ---   *   ---
-# ^post-parse
-
-sub spell_def($self,$branch) {
-
-  my @lv     = @{$branch->{leaves}};
-  my ($name) = $branch->pluck($lv[0]);
-
-  $branch->{value}=$name->{value};
-  $lv[1]->flatten_branch();
-
-};
-
-# ---   *   ---   *   ---
-
-  rule('~<term>');
-  rule('~<name>');
-  rule('~<degree>');
-
-# ---   *   ---   *   ---
-
-  rule('$%<beg-parens=\(>');
-  rule('$?~<dice>');
-  rule('$%<end-parens=\)>');
-
-  rule(q[
-
-    $<spell-dice>
-    &spell_dice
-
-    beg-parens
-    dice
-
-    end-parens
-
-  ]);
-
-sub spell_dice($self,$branch) {
-
-  my $st=$branch->bhash();
-  $st->{dice}//='d1';
+  };
 
   $branch->clear();
 
-  $branch->{value}='dice';
-  $branch->init($st->{dice});
-
 };
 
 # ---   *   ---   *   ---
-# combo
+# get [names,values] from nterm
 
-  rule(q[
+sub rd_nterm_vlist($self,$lv) {
 
-    $<spell-decl>
-    &spell_decl
+  my @eye=$PE_EYE->recurse(
 
-    name
-    spell-dice
-    degree
+    $lv,
 
-  ]);
-
-# ---   *   ---   *   ---
-# ^post-parse
-
-sub spell_decl_ctx($self,$branch) {
-
-  # get nodes up to next hierarchical
-  my @out=$branch->{parent}->match_until(
-    $branch,qr{^spell-decl$}
+    mach       => $self->{mach},
+    frame_vars => $self->Shared_FVars(),
 
   );
 
-  # ^all remaining on fail
-  @out=$branch->{parent}->all_from(
-    $branch
+  my @names=map {
+    $ARG->{raw}
 
-  ) if ! @out;
+  } $eye[0]->branch_values();
 
-  $branch->pushlv(@out);
+  my @values=(defined $eye[1])
+    ? $eye[1]->branch_values()
+    : ()
+    ;
+
+  return (\@names,\@values);
 
 };
 
 # ---   *   ---   *   ---
+# ^bind decls
 
-  rule(q[
+sub var_ctx($self,$branch) {
 
-    |<expr-list>
-    &clip
+  my $mach   = $self->{mach};
+  my $scope  = $mach->{scope};
 
-    spell-decl spell-def
+  my $st     = $branch->{value};
+  my $ptrs   = $st->{ptrs};
 
-  ]);
+  my @names  = @{$st->{names}};
 
-  rule('<expr> &clip expr-list term');
 
-  our @CORE=qw(expr);
+  # mark uninitialized
+  map {
+    $st->{values}->[$ARG]//=
+      $mach->null('void')
+
+  } 0..$#names;
+
+
+  # ^bind decls
+  my @values=@{$st->{values}};
+
+  while(@names && @values) {
+
+    my $name  = shift @names;
+    my $value = shift @values;
+
+    $value->{id}    = $name;
+    $value->{const} = $st->{type} eq 'ROM';
+
+    my $ptr=$mach->bind($value);
+    push @$ptrs,$ptr;
+
+  };
+
+};
 
 # ---   *   ---   *   ---
+# ^rerun ops
 
-}; # BEGIN
+sub var_run($self,$branch) {
+
+  my $st   = $branch->{value};
+  my $ptrs = $st->{ptrs};
+
+  my @ar=map {
+    $self->deref($$ARG)
+
+  } @$ptrs;
+
+};
+
+# ---   *   ---   *   ---
+# internal dice rolls
+
+  rule('~<roll-key>');
+  rule('~<dice>');
+  rule('$<roll> roll-key bare dice term');
+
+# ---   *   ---   *   ---
+# ^post-parse
+
+sub roll($self,$branch) {
+
+  my ($type,$name,$dice)=
+    $branch->leafless_values();
+
+  RPG::Dice->fetch(\$dice);
+
+  $branch->{value}={
+
+    type => uc $type,
+
+    name => $name,
+    dice => $dice,
+
+    ptr  => undef,
+
+  };
+
+  $branch->clear();
+
+};
+
+# ---   *   ---   *   ---
+# ^creates value holding
+# result of dice roll
+
+sub roll_ctx($self,$branch) {
+
+  my $st   = $branch->{value};
+  my $dice = $st->{dice};
+
+  my $mach = $self->{mach};
+
+  $st->{ptr}=$mach->decl(
+    num => $st->{name},
+    raw => $dice->roll(),
+
+  );
+
+};
+
+# ---   *   ---   *   ---
+# ^re-rolls
+
+sub roll_run($self,$branch) {
+
+  my $st   = $branch->{value};
+
+  my $dice = $st->{dice};
+  my $ptr  = $st->{ptr};
+
+  $$ptr->{raw}=$dice->roll();
+
+};
+
+# ---   *   ---   *   ---
+# make parser tree
+
+  our @CORE=qw(lcom hier var roll);
+
+};
 
 # ---   *   ---   *   ---
 # test
 
-  my $prog = q[
+my $prog=q[
 
-ajira () *^"
+rune hail;
 
-  spells:
-    * thunder
-    * plasma-cannon
-    ;
+  roll base 1d4;
+  var  sum  base+2;
 
 ];
 
-# ---   *   ---   *   ---
-
-#  props:
-#    * character
-#    * human female
-#    * portrait $24
-#    ;
-#
-#  effects:
-#    * ignition-mastery
-#    * farsight
-#    * surge
-#    * madrias-curse
-#    ;
-#
-#  weapon:
-#    * martyrdom
-#    ;
-#
-#  apparel:
-#    * leather-gloves
-#    * black-hood
-#    * cotton-cape
-#    * hardy-chains
-#    * snow-shoes
-#    ;
-
-# ---   *   ---   *   ---
-
-  my $ice  = Grammar::Marauder->parse(
-    "$prog",-r=>2
-
-  );
-
-#  $ice->{p3}->prich();
+my $ice=Grammar::Marauder->parse($prog);
+$ice->{p3}->prich();
 
 # ---   *   ---   *   ---
 1; # ret

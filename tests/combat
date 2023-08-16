@@ -44,6 +44,37 @@ sub damage($M) {
 
 };
 
+# ---   *   ---   *   ---
+# give health back
+
+sub heal($M) {
+
+  my $dmg   = $M->{mag}/2;
+
+  my $attrs = $M->{dst}->{attrs};
+  my $key   = $M->{self}->key();
+
+  $attrs->{$key}->mod_current($dmg);
+
+};
+
+# ---   *   ---   *   ---
+# ^passive
+
+sub heal_tick($M) {
+
+  my $mag=$M->{mag};
+  $M->{mag}=$mag/$M->{spell}->{dur};
+
+  heal($M);
+
+  $M->{mag}=$mag;
+
+};
+
+# ---   *   ---   *   ---
+# divine inspiration
+
 sub _bless($M) {
 
   $M->{bless_mag}//=$M->{mag};
@@ -90,6 +121,7 @@ sub set_bar_color($dst,$key,$color) {
   my $old  = $attr->{bar}->{color};
 
   $attr->{bar}->{color}=$color;
+  $attr->{bar}->update_animar();
 
   return $old;
 
@@ -97,7 +129,6 @@ sub set_bar_color($dst,$key,$color) {
 
 sub poison($M) {
 
-  $M->{poison_self} //= $M->{self};
   $M->{poison_end}  //= set_bar_color(
 
     $M->{dst},
@@ -158,6 +189,38 @@ sub poison_tick($M) {
 };
 
 # ---   *   ---   *   ---
+# buff test
+
+sub hearten($M) {
+
+  my $key   = $M->{self}->key();
+  my $spell = $M->{spell};
+  my $attrs = $M->{src}->{attrs};
+
+  $attrs->{$key}->add_modifiers(
+    $spell->{name}=>$M->{mag}
+
+  );
+
+};
+
+sub hearten_tick($M) {
+
+  if(1 == $M->{dur}) {
+
+    my $key  = $M->{self}->key();
+    my $attr = $M->{src}->{attrs}->{$key};
+
+    $attr->clear_modifiers(
+      $M->{spell}->{name}
+
+    );
+
+  };
+
+};
+
+# ---   *   ---   *   ---
 # ^add to table
 
 RPG::Magic->new(
@@ -192,11 +255,37 @@ RPG::Magic->new(
   'poison' => \&poison,
 
   tab=>{
-    key  => 'hp',
+    key=>'hp',
 
   },
 
-  tick => \&poison_tick,
+  tick=>\&poison_tick,
+
+);
+
+RPG::Magic->new(
+
+  'heal' => \&heal,
+
+  tab=>{
+    key=>'hp'
+
+  },
+
+  tick=>\&heal_tick,
+
+);
+
+RPG::Magic->new(
+
+  'hearten' => \&hearten,
+
+  tab=>{
+    key=>'hp'
+
+  },
+
+  tick=>\&hearten_tick,
 
 );
 
@@ -271,6 +360,20 @@ RPG::Spell->new(
 
   anim   => [chr(0x1D8)],
   color  => 0b01100011,
+
+);
+
+RPG::Spell->new(
+
+  name   => 'Prayer',
+  school => 'Faith',
+
+  degree => 3,
+  dur    => 2,
+
+  eff    => ['bless','hearten','heal'],
+
+  desc   => 'Increases HP and HP regen',
 
 );
 

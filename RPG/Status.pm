@@ -162,12 +162,25 @@ sub tick($self) {
 
   my @over=grep {
 
-    my $stat  = shift @eff;
+    my $stat   = shift @eff;
 
-    my $M     = $stat->{magic};
-    my $spell = $M->{spell};
+    my $M      = $stat->{magic};
+    my $spell  = $M->{spell};
 
-    map {$ARG->tick($M)} @{$spell->{eff}};
+    my @ahead  = @{$spell->{eff}};
+
+    $M->{prev} = [];
+
+    map {
+
+      $M->{self}  = shift @ahead;
+      $M->{ahead} = \@ahead;
+
+      $ARG->tick($M);
+
+      push @{$M->{prev}},$M->{prev};
+
+    } @{$spell->{eff}};
 
     0 >= $M->{dur}--;
 
