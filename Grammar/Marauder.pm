@@ -112,9 +112,20 @@ BEGIN {
 
     )),
 
-    q[roll-key]  => re_pekey('roll'),
+    q[roll-key]  => re_pekey(qw(
+      roll
 
-    q[io-key]    => re_pekey(qw(in out io)),
+    )),
+
+    q[io-key]    => re_pekey(qw(
+      in out io
+
+    )),
+
+    q[set-key]   => re_pekey(qw(
+      cpy mov wap clr
+
+    )),
 
   };
 
@@ -148,8 +159,14 @@ sub hier($self,$branch) {
   $branch->clear();
 
   $branch->init({
-    type=>uc $type,
-    name=>$name,
+
+    type => lc $type,
+    name => $name,
+
+    in   => [],
+    out  => [],
+
+    from => [],
 
   });
 
@@ -172,11 +189,29 @@ sub hier_ctx($self,$branch) {
 
   $scope->decl_branch($branch,@path);
 
+  pop @path;
+
+  my $st  = $branch->{value};
+  my $flg = "\*$st->{name}";
+
+  my $ptr = $mach->decl(
+
+    stk   => $flg,
+    path  => \@path,
+
+    raw   => [],
+
+  );
+
+  $st->{ptr}=$ptr;
+
 };
 
 # ---   *   ---   *   ---
 # ^parent child leaves to
 # hier branch
+#
+# add 'ret' node at bottom
 
 sub hier_sort($self,$branch) {
 
@@ -184,6 +219,17 @@ sub hier_sort($self,$branch) {
 
   my @lv=$branch->match_up_to($re);
   $branch->pushlv(@lv);
+
+  my $ret=$branch->init('ret');
+
+  $ret->fork_chain(
+
+    dom  => ref $self,
+    name => 'ret',
+
+    skip => 2,
+
+  );
 
 };
 
@@ -233,36 +279,83 @@ sub hier_run($self,$branch) {
   my $mach  = $self->{mach};
   my $scope = $mach->{scope};
 
-  my @path  = $self->hier_path($branch);
-  my $lv    = $scope->haslv(@path,'IN');
+  # store path to caller
+  my $st=$branch->{value};
+  push @{$st->{from}},[$scope->path()];
 
 
-  # fetch input values
-  if(defined $lv) {
-
-    my @args  = $mach->get_args();
-       @args  = $self->deref_args(@args);
-
-    my @ptr   = $lv->leafless_values();
+  # ^set path to current branch
+  $self->hier_path($branch);
 
 
-    throw_overargs(@path)
-    if @ptr < @args;
+  # get inputs
+  my @stk   = $mach->get_args();
+     @stk   = $self->deref_args(@stk);
 
 
-    map {
-      (shift @ptr)->{raw}=$ARG
-
-    } @args;
-
-
-  };
-
-if(defined $lv) {
-  my @ptr=$lv->leafless_values();
-  map {say $ARG->{raw}} @ptr;
+  # ^store
+  $self->io_set($branch,'in',@stk);
+  $self->io_set($branch,'out');
 
 };
+
+# ---   *   ---   *   ---
+# ^overwrites io vars
+
+sub io_set($self,$branch,$key,@values) {
+
+  my $mach  = $self->{mach};
+  my $scope = $mach->{scope};
+
+  my @path  = $scope->path();
+  my $lv    = $scope->haslv(@path,$key);
+
+  my $st    = $branch->{value};
+  my $slot  = $st->{$key};
+
+
+  # set default values
+  $self->io_defaults($slot,$lv)
+  if ! @$slot;
+
+
+  # open new frame
+  push @$slot,[];
+
+  my $prev = $slot->[-1];
+  my @def  = @{$slot->[0]};
+
+
+  # ^set
+  if($lv) {
+
+    my @ptr=$lv->leafless_values();
+
+    throw_overargs(@path)
+    if @ptr < @values;
+
+    # set defaults
+    map {
+      push @values,$def[$ARG]
+
+    } @values..$#def
+
+    if @values < @def;
+
+
+    # save old and overwrite
+    @$prev=$self->deref_args(@ptr);
+
+    map {
+      $ARG->{raw}=(shift @values)
+
+    } @ptr;
+
+  # ^no IO slots, errcheck input
+  } elsif(@values) {
+    throw_overargs(@path);
+
+  };
 
 };
 
@@ -279,6 +372,19 @@ sub deref_args($self,@ar) {
 };
 
 # ---   *   ---   *   ---
+# copies default values for
+# IO var slots
+
+sub io_defaults($self,$slot,$lv) {
+
+  return if ! $lv;
+
+  my @ptr=$lv->leafless_values();
+  push @$slot,[$self->deref_args(@ptr)];
+
+};
+
+# ---   *   ---   *   ---
 # errme
 
 sub throw_overargs(@path) {
@@ -287,13 +393,91 @@ sub throw_overargs(@path) {
 
   errout(
 
-    q[Too many arguments for fcall ]
-  . q[[goodtag]:%s],
+    q[Too many IO values for fcall ]
+  . q[[errtag]:%s],
 
     lvl  => $AR_FATAL,
     args => [$path],
 
   );
+
+};
+
+# ---   *   ---   *   ---
+# return
+
+sub ret_run($self,$branch) {
+
+  # get output
+  my $par=$branch->{parent};
+  my @out=$self->io_restore($par,'out');
+
+  # ^push to proc stack
+  my $dst=$par->{value}->{ptr};
+
+  my $out=(@out > 1)
+    ? [@out]
+    : $out[0]
+    ;
+
+  push @{$$dst->{raw}},$out;
+
+
+  # restore previous inputs
+  $self->io_restore($par,'in');
+
+  # restore previous path
+  my $mach  = $self->{mach};
+  my $scope = $mach->{scope};
+
+  my $st    = $par->{value};
+  my $from  = pop @{$st->{from}};
+
+  $scope->path(@$from) if $from;
+
+
+  return $out;
+
+};
+
+# ---   *   ---   *   ---
+# ^restores previous values
+
+sub io_restore($self,$branch,$key) {
+
+  my @out   = ();
+
+  my $mach  = $self->{mach};
+  my $scope = $mach->{scope};
+
+  my @path  = $scope->path();
+  my $lv    = $scope->haslv(@path,$key);
+
+
+  # get previous values
+  my $st    = $branch->{value};
+  my $slot  = $st->{$key};
+
+  my $prev  = pop @$slot;
+
+
+  # ^set
+  if($lv && $prev) {
+
+    # get current
+    my @ptr=$lv->leafless_values();
+    @out=map {$ARG->{raw}} @ptr;
+
+    # ^overwrite
+    map {
+      $ARG->{raw}=(shift @$prev)
+
+    } @ptr;
+
+  };
+
+
+  return @out;
 
 };
 
@@ -312,6 +496,8 @@ sub var($self,$branch) {
   my ($type,$names,$values)=
     $self->rd_name_nterm($branch);
 
+  # ^set undef to null
+  $values //= [];
   $self->defnull($values,@$names);
 
 
@@ -472,6 +658,105 @@ sub var_run($self,$branch) {
 };
 
 # ---   *   ---   *   ---
+# modifying vars
+
+  rule('~<set-key>');
+  rule('$<set> set-key nterm term');
+
+# ---   *   ---   *   ---
+# ^post parse
+
+sub set($self,$branch) {
+
+  state $arg_cnt={
+
+    cpy => 2,
+    mov => 2,
+    wap => 2,
+
+    clr => 1,
+
+  };
+
+  # unpack
+  my ($type,$vars)=
+    $self->rd_name_nterm($branch);
+
+  $type=lc $type;
+
+  # errchk args
+  throw_set($type)
+  if @$vars > $arg_cnt->{$type};
+
+
+  # ^repack
+  $branch->{value}={
+    type => $type,
+    vars => $vars,
+
+  };
+
+
+  $branch->clear();
+
+};
+
+# ---   *   ---   *   ---
+# ^errme
+
+sub throw_set($type) {
+
+  errout(
+
+    q[Too many args for ]
+  . q[instruction [ctl]:%s],
+
+    lvl  => $AR_FATAL,
+    args => [$type],
+
+  );
+
+};
+
+# ---   *   ---   *   ---
+# ^execute
+
+sub set_run($self,$branch) {
+
+  my $st   = $branch->{value};
+
+  my $type = $st->{type};
+  my $vars = $st->{vars};
+
+  my ($a,$b)=map {
+    $self->deref($ARG);
+
+  } @$vars;
+
+
+  # copy B into A
+  if($type eq 'cpy') {
+    $a->{raw}=$b->{raw};
+
+  # ^clear B after copy
+  } elsif($type eq 'mov') {
+    $a->{raw}=$b->{raw};
+    $b->{raw}=$NULL;
+
+  # ^swap B with A
+  } elsif($type eq 'wap') {
+    ($a->{raw},$b->{raw})=
+      ($b->{raw},$a->{raw});
+
+  # ^clear A
+  } else {
+    $a->{raw}=$NULL;
+
+  };
+
+};
+
+# ---   *   ---   *   ---
 # internal dice rolls
 
   rule('~<roll-key>');
@@ -490,7 +775,7 @@ sub roll($self,$branch) {
 
   $branch->{value}={
 
-    type => uc $type,
+    type => lc $type,
 
     name => $name,
     dice => $dice,
@@ -565,27 +850,34 @@ sub fcall($self,$branch) {
 # ^binds fptrs
 
 sub fcall_ctx($self,$branch) {
+  my $st=$branch->{value};
+  $st->{fn}=$self->fcall_find($st->{fn});
 
-  # get F is builtin
-  my $st = $branch->{value};
-  my $fn = codefind(ref $self,$st->{fn});
+};
 
+# ---   *   ---   *   ---
+# ^lookup
+
+sub fcall_find($self,$name) {
+
+  # is builtin
+  my $fn=codefind(ref $self,$name);
 
   # ^nope, lookup user-defined F
   if(! $fn) {
 
     my $f    = $self->{frame};
-    my $path = "$f->{-chier_t}\::$st->{fn}";
+    my $path = "$f->{-chier_t}\::$name";
 
     $fn=sub (@args) {
-      $self->run_branch($path,@args);
+      return $self->run_branch($path,@args);
 
     };
 
   };
 
-  # ^bind
-  $st->{fn}=$fn;
+
+  return $fn;
 
 };
 
@@ -605,7 +897,21 @@ sub fcall_run($self,$branch) {
   );
 
   # ^call
-  $fn->(@args);
+  return $fn->(@args);
+
+};
+
+# ---   *   ---   *   ---
+# ^as a value expansion
+
+sub fcall_vex($self,$o) {
+
+  my $fn   = $self->fcall_find($o->{proc});
+  my $args = $o->{args};
+
+  $o->{raw}=$fn->(@$args);
+
+  return $o->{raw};
 
 };
 
@@ -633,7 +939,7 @@ sub io($self,$branch) {
     $self->rd_name_nterm($branch);
 
   $self->defnull($values,@$names);
-  $type=uc $type;
+  $type=lc $type;
 
 
   # make [name=>value] pairs
@@ -643,19 +949,19 @@ sub io($self,$branch) {
   } 0..@$names-1;
 
   my $st={
-    input  => [],
-    output => [],
+    in  => [],
+    out => [],
 
   };
 
 
   # defines input format
-  if($type eq 'IN') {
-    $st->{input}=\@fmat;
+  if($type eq 'in') {
+    $st->{in}=\@fmat;
 
   # ^output format
-  } elsif($type eq 'OUT') {
-    $st->{output}=\@fmat;
+  } elsif($type eq 'out') {
+    $st->{out}=\@fmat;
 
 
   # ^both, beq from F
@@ -681,8 +987,8 @@ sub io_ctx($self,$branch) {
   # ^get merged struc
   my $st     = $branch->{value};
 
-  my $input  = $st->{input};
-  my $output = $st->{output};
+  my $input  = $st->{in};
+  my $output = $st->{out};
 
   # ^force defaults
   $st->{iptr}=[];
@@ -697,7 +1003,7 @@ sub io_ctx($self,$branch) {
 
     0,
 
-    'IN',
+    'in',
 
   ) if @$input;
 
@@ -710,7 +1016,7 @@ sub io_ctx($self,$branch) {
 
     0,
 
-    'OUT',
+    'out',
 
   ) if @$output;
 
@@ -731,12 +1037,12 @@ sub io_merge($self,$branch) {
   # ^merge values
   my @st  = map {$ARG->leaf_value(0)} @lv;
 
-  my @in  = map {@{$ARG->{input}}} @st;
-  my @out = map {@{$ARG->{output}}} @st;
+  my @in  = map {@{$ARG->{in}}} @st;
+  my @out = map {@{$ARG->{out}}} @st;
 
   $branch->{value}={
-    input  => \@in,
-    output => \@out,
+    in  => \@in,
+    out => \@out,
 
   };
 
@@ -752,7 +1058,7 @@ sub io_merge($self,$branch) {
 # ---   *   ---   *   ---
 # make parser tree
 
-  our @CORE=qw(lcom hier io var roll fcall);
+  our @CORE=qw(lcom hier io set var roll fcall);
 
 };
 
@@ -764,19 +1070,21 @@ my $prog=q[
 rune hail;
 
   in   X    0;
+  out  Y    0;
 
   roll base 1d4;
-  var  sum  base+2;
+  var  sum  base+in::X;
 
-  test sum;
+  cpy  out::Y,sum;
+
 
 rune fire;
-  hail;
+  out r {hail 1};
 
 ];
 
 my $ice=Grammar::Marauder->parse($prog);
-$ice->run_branch('RUNE::fire');
+say $ice->run_branch('rune::fire');
 
 # ---   *   ---   *   ---
 1; # ret
