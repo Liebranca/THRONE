@@ -51,7 +51,7 @@ package Grammar::Marauder;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.2;#b
+  our $VERSION = v0.00.3;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -188,6 +188,8 @@ sub hier_ctx($self,$branch) {
   my @path  = $self->hier_path($branch);
 
   $scope->decl_branch($branch,@path);
+  $self->hier_input($branch);
+
 
   pop @path;
 
@@ -217,11 +219,12 @@ sub hier_sort($self,$branch) {
 
   state $re=qr{^hier$};
 
+  # parenting
   my @lv=$branch->match_up_to($re);
-
-  $self->hier_input($branch);
   $branch->pushlv(@lv);
 
+
+  # implicit return at end of branch
   my $ret=$branch->init('ret');
 
   $ret->fork_chain(
@@ -229,7 +232,7 @@ sub hier_sort($self,$branch) {
     dom  => ref $self,
     name => 'ret',
 
-    skip => 2,
+    skip => 1,
 
   );
 
@@ -262,11 +265,12 @@ sub hier_input($self,$branch) {
 
 
   # add io nodes
-  my @ar=($in,$out);
+  my @ar=($out,$in);
+
   map {
 
     # make leaf node
-    my $io=$branch->init('io');
+    my ($io)=$branch->insert(0,'io');
 
     # ^grandchild to hold values
     $io->init({
@@ -275,15 +279,15 @@ sub hier_input($self,$branch) {
 
     });
 
-    # ^assign proc to leaf
-    $io->fork_chain(
-      dom  => ref $self,
-      name => 'io_ctx',
-      skip => 0,
+  } qw(out in);
 
-    );
+  # ^run merge proc on leaves
+  $branch->{leaves}->[0]->fork_chain(
+    dom  => ref $self,
+    name => 'io',
+    skip => 1,
 
-  } qw(in out);
+  );
 
 };
 
@@ -343,8 +347,8 @@ sub hier_run($self,$branch) {
 
 
   # get inputs
-  my @stk   = $mach->get_args();
-     @stk   = $self->deref_args(@stk);
+  my @stk=$mach->get_args();
+     @stk=$self->deref_args(@stk);
 
 
   # ^store
@@ -388,6 +392,7 @@ sub io_set($self,$branch,$key,@values) {
     throw_overargs(@path)
     if @ptr < @values;
 
+
     # set defaults
     map {
       push @values,$def[$ARG]
@@ -404,6 +409,7 @@ sub io_set($self,$branch,$key,@values) {
       $ARG->{raw}=(shift @values)
 
     } @ptr;
+
 
   # ^no IO slots, errcheck input
   } elsif(@values) {
@@ -783,7 +789,6 @@ sub set_run($self,$branch) {
   my $type = $st->{type};
   my $vars = $st->{vars};
 
-
   my ($a,$b)=map {
     $self->deref($ARG,key=>1);
 
@@ -890,16 +895,21 @@ sub roll_run($self,$branch) {
 
 sub fcall($self,$branch) {
 
+  # unpack
   my ($name,$args)=
     $self->rd_name_nterm($branch);
 
-  $name=$name->deref();
+  $name   = $name->deref();
+  $args //= [];
 
+
+  # ^repack
   $branch->{value}={
     fn   => $name,
     args => $args,
 
   };
+
 
   $branch->clear();
 
@@ -909,13 +919,37 @@ sub fcall($self,$branch) {
 # ^binds fptrs
 
 sub fcall_ctx($self,$branch) {
+
   my $st=$branch->{value};
+
+  $self->fcall_args($branch,$st->{args});
   $st->{fn}=$self->fcall_find($st->{fn});
 
 };
 
 # ---   *   ---   *   ---
-# ^lookup
+# ^adds implicit arguments
+
+sub fcall_args($self,$branch,$args) {
+
+  my $mach = $self->{mach};
+
+  my $par  = $branch->{parent};
+  my $type = $par->{value}->{type};
+
+  if($type eq 'rune') {
+
+    unshift @$args,$mach->vice(
+      'bare',raw=>'M',
+
+    );
+
+  };
+
+};
+
+# ---   *   ---   *   ---
+# ^F lookup
 
 sub fcall_find($self,$name) {
 
@@ -954,6 +988,7 @@ sub fcall_run($self,$branch) {
     $self->{mach}->get_args()
 
   );
+
 
   # ^call
   return $fn->(@args);
@@ -1043,6 +1078,9 @@ sub io($self,$branch) {
 
 sub io_ctx($self,$branch) {
 
+  return if ! @{$branch->{leaves}};
+
+
   $self->io_merge($branch);
 
   # ^get merged struc
@@ -1107,6 +1145,7 @@ sub io_merge($self,$branch) {
   my @in  = map {@{$ARG->{in}}} @st;
   my @out = map {@{$ARG->{out}}} @st;
 
+
   # ^set
   $branch->{value}={
     in  => \@in,
@@ -1138,25 +1177,22 @@ my $prog=q[
 rune hail;
 
   in   X    0;
-  out  Y    0;
 
   roll base 1d4;
-  var  sum  base+in::X;
+  var  sum  base;
 
-  cpy  out::Y,sum;
+  cpy  M->mag,X;
 
 
 rune fire;
-
-  out ty;
-
-  cpy M->mag,12;
-  cpy ty,M;
+  hail 1;
 
 ];
 
 my $ice = Grammar::Marauder->parse($prog);
-my $M   = $ice->run_branch('rune::fire');
+my $M   = {};
+
+$ice->run_branch('rune::fire',$M);
 
 fatdump(\$M);
 
