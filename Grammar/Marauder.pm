@@ -218,6 +218,8 @@ sub hier_sort($self,$branch) {
   state $re=qr{^hier$};
 
   my @lv=$branch->match_up_to($re);
+
+  $self->hier_input($branch);
   $branch->pushlv(@lv);
 
   my $ret=$branch->init('ret');
@@ -234,7 +236,59 @@ sub hier_sort($self,$branch) {
 };
 
 # ---   *   ---   *   ---
-# ^reset scope path
+# ^adds implicit IO accto
+# hierarchical type
+
+sub hier_input($self,$branch) {
+
+  my $mach = $self->{mach};
+
+  my $st   = $branch->{value};
+  my $type = $st->{type};
+
+  my $in   = [];
+  my $out  = [];
+
+
+  # ^add magic charge for runes
+  if($type eq 'rune') {
+
+    my $key=$mach->vice('bare',raw=>'M');
+    my $obj=$mach->vice('obj',raw=>{});
+
+    $in=[$key=>$obj];
+
+  };
+
+
+  # add io nodes
+  my @ar=($in,$out);
+  map {
+
+    # make leaf node
+    my $io=$branch->init('io');
+
+    # ^grandchild to hold values
+    $io->init({
+      $ARG => (shift @ar),
+      type => $ARG,
+
+    });
+
+    # ^assign proc to leaf
+    $io->fork_chain(
+      dom  => ref $self,
+      name => 'io_ctx',
+      skip => 0,
+
+    );
+
+  } qw(in out);
+
+};
+
+# ---   *   ---   *   ---
+# reset scope path
 
 sub hier_path($self,$branch) {
 
@@ -682,6 +736,7 @@ sub set($self,$branch) {
   my ($type,$vars)=
     $self->rd_name_nterm($branch);
 
+
   $type=lc $type;
 
   # errchk args
@@ -728,29 +783,33 @@ sub set_run($self,$branch) {
   my $type = $st->{type};
   my $vars = $st->{vars};
 
+
   my ($a,$b)=map {
-    $self->deref($ARG);
+    $self->deref($ARG,key=>1);
 
   } @$vars;
 
 
   # copy B into A
   if($type eq 'cpy') {
-    $a->{raw}=$b->{raw};
+    $a->set($b);
 
   # ^clear B after copy
   } elsif($type eq 'mov') {
-    $a->{raw}=$b->{raw};
-    $b->{raw}=$NULL;
+    $a->set($b);
+    $b->set($NULL);
 
   # ^swap B with A
   } elsif($type eq 'wap') {
-    ($a->{raw},$b->{raw})=
-      ($b->{raw},$a->{raw});
+
+    my $tmp=$a->get();
+
+    $a->set($b);
+    $b->set($tmp);
 
   # ^clear A
   } else {
-    $a->{raw}=$NULL;
+    $a->set(0);
 
   };
 
@@ -938,7 +997,9 @@ sub io($self,$branch) {
   my ($type,$names,$values)=
     $self->rd_name_nterm($branch);
 
+  $values //= [];
   $self->defnull($values,@$names);
+
   $type=lc $type;
 
 
@@ -1037,9 +1098,16 @@ sub io_merge($self,$branch) {
   # ^merge values
   my @st  = map {$ARG->leaf_value(0)} @lv;
 
+  map {
+    $ARG->{in}  //= [];
+    $ARG->{out} //= [];
+
+  } @st;
+
   my @in  = map {@{$ARG->{in}}} @st;
   my @out = map {@{$ARG->{out}}} @st;
 
+  # ^set
   $branch->{value}={
     in  => \@in,
     out => \@out,
@@ -1079,12 +1147,18 @@ rune hail;
 
 
 rune fire;
-  out r {hail 1};
+
+  out ty;
+
+  cpy M->mag,12;
+  cpy ty,M;
 
 ];
 
-my $ice=Grammar::Marauder->parse($prog);
-say $ice->run_branch('rune::fire');
+my $ice = Grammar::Marauder->parse($prog);
+my $M   = $ice->run_branch('rune::fire');
+
+fatdump(\$M);
 
 # ---   *   ---   *   ---
 1; # ret
