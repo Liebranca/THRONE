@@ -43,6 +43,7 @@ package Grammar::Marauder;
 
   use Grammar::peso::common;
   use Grammar::peso::value;
+  use Grammar::peso::ops;
   use Grammar::peso::eye;
 
   use lib $ENV{'ARPATH'}.'/THRONE/';
@@ -141,6 +142,7 @@ BEGIN {
   ));
 
   ext_rules($PE_VALUE,qw(bare value));
+  ext_rules($PE_OPS,qw(expr));
 
 # ---   *   ---   *   ---
 # hierarchicals
@@ -888,30 +890,63 @@ sub roll_run($self,$branch) {
 # ---   *   ---   *   ---
 # function calls
 
-  rule('$<fcall> value opt-nterm term');
+  rule('$<fcall> expr opt-nterm term');
 
 # ---   *   ---   *   ---
 # ^post-parse
 
 sub fcall($self,$branch) {
 
-  # unpack
-  my ($name,$args)=
+  # flatten expression subtree
+  $self->expr_collapse($branch);
+
+  # ^unpack
+  my ($fn,$args)=
     $self->rd_name_nterm($branch);
 
-  $name   = $name->deref();
+
+  # member calls are parsed as
+  # compound operators; we use
+  # value type to identify them
+  my $type=$fn->{type};
+  my $memf=$type eq 'ops';
+
+
+  # ^non member calls use a plain
+  # bareword rather than an obj
+  $fn=(! $memf)
+    ? $fn->deref()
+    : $fn
+    ;
+
   $args //= [];
 
 
   # ^repack
   $branch->{value}={
-    fn   => $name,
+
+    memf => $memf,
+
+    fn   => $fn,
     args => $args,
 
   };
 
 
   $branch->clear();
+
+
+  # ^fork member calls
+  if($memf) {
+
+    $branch->fork_chain(
+      dom  => ref $self,
+      name => 'm_fcall',
+      skip => 0,
+
+    );
+
+  };
 
 };
 
@@ -982,13 +1017,13 @@ sub fcall_run($self,$branch) {
   my $st  = $branch->{value};
   my $fn  = $st->{fn};
 
+
   # fetch arg values
   my @args=$self->deref_args(
     @{$st->{args}},
     $self->{mach}->get_args()
 
   );
-
 
   # ^call
   return $fn->(@args);
@@ -997,6 +1032,8 @@ sub fcall_run($self,$branch) {
 
 # ---   *   ---   *   ---
 # ^as a value expansion
+#
+# TODO: handle member calls
 
 sub fcall_vex($self,$o) {
 
@@ -1010,10 +1047,25 @@ sub fcall_vex($self,$o) {
 };
 
 # ---   *   ---   *   ---
-# ^test call
+# ^runs member F
 
-sub test($sum) {
-  say ">>$sum";
+sub m_fcall_run($self,$branch) {
+
+  my $st=$branch->{value};
+
+  # get member F wrapper
+  my $fn=$self->deref($st->{fn});
+     $fn=$fn->get();
+
+  # ^fetch arg values
+  my @args=$self->deref_args(
+    @{$st->{args}}
+
+  );
+
+
+  # ^call
+  return $fn->(@args);
 
 };
 
@@ -1165,7 +1217,16 @@ sub io_merge($self,$branch) {
 # ---   *   ---   *   ---
 # make parser tree
 
-  our @CORE=qw(lcom hier io set var roll fcall);
+  our @CORE=qw(
+
+    lcom
+
+    hier io
+    set var roll
+
+    fcall
+
+  );
 
 };
 
@@ -1176,23 +1237,31 @@ my $prog=q[
 
 rune hail;
 
-  in   X    0;
+#  hail 1;
+  M->Q ->* clear;
 
-  roll base 1d4;
-  var  sum  base;
+#  in   X    0;
+#
+#  roll base 1d4;
+#  var  sum  base;
+#
+#  cpy  M->mag,X;
 
-  cpy  M->mag,X;
 
-
-rune fire;
-  hail 1;
+#rune fire;
+#  hail 1;
 
 ];
 
-my $ice = Grammar::Marauder->parse($prog);
-my $M   = {};
+use Queue;
 
-$ice->run_branch('rune::fire',$M);
+my $ice = Grammar::Marauder->parse($prog);
+my $M   = {
+  Q=>Queue->nit(),
+
+};
+
+$ice->run_branch('rune::hail',$M);
 
 fatdump(\$M);
 
