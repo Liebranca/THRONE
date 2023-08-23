@@ -57,13 +57,18 @@ BEGIN {
   $PE_STD->use_common();
   $PE_STD->use_value();
   $PE_STD->use_eye();
+  $PE_STD->use_switch();
 
   $MAR_STD->uses(qw(
     hier var roll set io fcall
 
   ));
 
-  fvars('Grammar::Marauder::hier');
+  fvars([qw(
+    Grammar::peso::switch
+    Grammar::Marauder::hier
+
+  )]);
 
 # ---   *   ---   *   ---
 # GBL
@@ -77,7 +82,7 @@ BEGIN {
 
     lcom
 
-    hier io
+    hier switch io
     set var roll
 
     fcall
@@ -93,25 +98,65 @@ BEGIN {
 
 my $prog=q[
 
-rune test_a;
+rune damage;
 
-  in   X;
+  in   $key 'hp';
+  var  attr target->attrs->$key;
 
-  roll base 1d4;
-  var  sum  base;
 
-  cpy  M->mag,X;
+  on $key == 'hp';
+    cpy attr,-dice/2;
 
-rune test_b;
-  test_a 1;
+  or $key == 'mp';
+    cpy attr,-dice/4;
+
+  off;
 
 ];
 
-my $M   = {mag=>0};
-my $ice = Grammar::Marauder->parse($prog);
 
-$ice->run_branch('rune::test_b',$M);
+my $M={
 
+  target => {
+    attrs=>{hp=>0}
+
+  },
+
+  dice   => 1,
+
+};
+
+#my $ice = Grammar::Marauder->parse($prog);
+
+#$ice->run_branch('rune::damage',$M);
+#fatdump(\$M);
+
+#my $s=$ice->xlate('pl');
+#$s=Fmat::tidyup(\$s);
+#
+#say $s;
+
+# ---   *   ---   *   ---
+
+sub damage ( $M = {}, $sflg_key = 'hp' ) {
+  my $target = \( $M->{target} );
+  my $caster = \( $M->{caster} );
+  my $dice   = \( $M->{dice} );
+  my $attr   = \( $$target->{attrs}->{$sflg_key} );
+  if ( ( $sflg_key eq 'hp' ) ) {
+    $$attr = ( -$$dice / 2 );
+
+  }
+  elsif ( ( $sflg_key eq 'mp' ) ) {
+    $$attr = ( -$$dice / 4 );
+
+  }
+  ;
+  return ();
+
+};
+
+damage($M);
 fatdump(\$M);
 
 # ---   *   ---   *   ---

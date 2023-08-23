@@ -175,6 +175,67 @@ sub set_run($self,$branch) {
 };
 
 # ---   *   ---   *   ---
+# out codestr
+
+sub set_pl_xlate($self,$branch) {
+
+  my $st    = $branch->{value};
+
+  my $mach  = $self->{mach};
+  my $scope = $mach->{scope};
+
+  my $type  = $st->{vars};
+  my $vars  = $st->{vars};
+
+  my $out   = $NULLSTR;
+
+  if($type eq 'clr') {
+
+    my $var = $vars->[0];
+    my $id  = "\$$var->{id}";
+
+    my $raw = $var->get();
+
+    if(is_hashref($raw)) {
+      $raw={};
+
+    } elsif(is_arrayref($raw)) {
+      $raw=[];
+
+    } elsif($var->{type} eq 'num') {
+      $raw=0;
+
+    } elsif($var->{type} eq 'str') {
+      $raw=$NULLSTR;
+
+    } else {
+      $raw=$NULL;
+
+    };
+
+    $out="$id=$raw;";
+
+  } else {
+
+    my ($dst)=(! $vars->[0]->{id})
+      ? $vars->[0]->pl_xlate(id=>0,scope=>$scope)
+      : $vars->[0]->pl_xlate(value=>0,scope=>$scope)
+      ;
+
+    my ($value) = $vars->[1]->pl_xlate(
+      id=>0,scope=>$scope
+
+    );
+
+    $out="$dst=$value;";
+
+  };
+
+  $branch->{pl_xlate}=$out;
+
+};
+
+# ---   *   ---   *   ---
 # do not generate a parser tree!
 
   our @CORE=qw();

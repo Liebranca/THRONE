@@ -221,17 +221,30 @@ sub io_merge($self,$branch) {
 # ---   *   ---   *   ---
 # outs codestr
 
-sub io_xlate($self,$branch) {
+sub io_pl_xlate($self,$branch) {
 
-  my $st  = $branch->{value};
-  my @out = ();
+  my $st=$branch->{value};
 
-  map {
-    push @out,$$ARG->pl_xlate();
+  my @in=map {
+    join '=',$$ARG->pl_xlate();
+
+  } grep {
+    defined $$ARG
 
   } array_values($st->{iptr});
 
-  $st->{pl_xlate}='(' . (join q[,],@out) . ')';
+  my @out=map {
+    join '=',$$ARG->pl_xlate();
+
+  } grep {
+    defined $$ARG
+
+  } array_values($st->{optr});
+
+  $branch->{pl_xlate}=
+    '(' . (join q[,],@in) . ") {"
+  . (join q[;],@out) . (';' x (0 != int @out))
+  ;
 
 };
 

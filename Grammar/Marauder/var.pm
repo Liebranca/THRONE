@@ -41,7 +41,7 @@ package Grammar::Marauder::var;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.1;#b
+  our $VERSION = v0.00.2;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -193,15 +193,21 @@ sub var_run($self,$branch) {
 
 sub var_pl_xlate($self,$branch) {
 
-  my $st  = $branch->{value};
-  my @out = ();
+  my $st   = $branch->{value};
 
-  map {
-    push @out,'my ' . $$ARG->pl_xlate() . ';';
+  my @args = map {
+    my ($id,$value)=$$ARG->pl_xlate(
+      scope=>$self->{mach}->{scope}
+
+    );
+
+    $value="\\($value)" if $$ARG->is_ptr();
+
+    "my $id=$value;";
 
   } array_values($st->{ptr});
 
-  say join "\n",@out;
+  $branch->{pl_xlate}=join $NULLSTR,@args;
 
 };
 

@@ -85,6 +85,7 @@ sub roll($self,$branch) {
   my ($type,$name,$dice)=
     $branch->leafless_values();
 
+  my $ire=$dice;
   RPG::Dice->fetch(\$dice);
 
   $branch->{value}={
@@ -93,6 +94,7 @@ sub roll($self,$branch) {
 
     name => $name,
     dice => $dice,
+    ire  => $ire,
 
     ptr  => undef,
 
@@ -132,6 +134,21 @@ sub roll_run($self,$branch) {
   my $ptr  = $st->{ptr};
 
   $$ptr->{raw}=$dice->roll();
+
+};
+
+# ---   *   ---   *   ---
+# outs codestr
+
+sub roll_pl_xlate($self,$branch) {
+
+  my $st   = $branch->{value};
+
+  my $name = $st->{name};
+  my $ire  = $st->{ire};
+
+  $branch->{pl_xlate}=
+    "my \$$name=RPG\::Dice->roll('$ire');";
 
 };
 

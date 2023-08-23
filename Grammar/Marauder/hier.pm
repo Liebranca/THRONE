@@ -115,14 +115,16 @@ sub hier_ctx($self,$branch) {
   $branch->{value}=$branch->leaf_value(0);
   $branch->clear();
 
-  $self->hier_sort($branch);
-
   my $mach  = $self->{mach};
   my $scope = $mach->{scope};
 
   my @path  = $self->hier_path($branch);
 
   $scope->decl_branch($branch,@path);
+
+  $self->hier_sort($branch);
+
+  $self->hier_vars($branch);
   $self->hier_input($branch);
 
 
@@ -205,7 +207,7 @@ sub hier_input($self,$branch) {
   map {
 
     # make leaf node
-    my ($io)=$branch->insert(0,'io');
+    my $io=$branch->init('io',unshift_leaves=>1);
 
     # ^grandchild to hold values
     $io->init({
@@ -221,9 +223,78 @@ sub hier_input($self,$branch) {
   $branch->{leaves}->[0]->fork_chain(
     dom  => ref $self,
     name => 'io',
-    skip => 0,
+    skip => 1,
 
   );
+
+};
+
+# ---   *   ---   *   ---
+# ^adds implicit vars accto
+# hierarchical type
+
+sub hier_vars($self,$branch) {
+
+  my $mach = $self->{mach};
+
+  my $st   = $branch->{value};
+  my $type = $st->{type};
+
+  my $vars = [];
+
+
+  # ^add magic charge for runes
+  if($type eq 'rune') {
+
+    my $names  = [];
+    my $values = [];
+
+    map {
+
+      my $name  = $ARG;
+      my $value = "M->$ARG";
+
+      # ^ipret
+      ($name,$value)=
+        $self->rd_nterm("$name $value");
+
+      push @$names,@$name;
+      push @$values,@$value;
+
+    } qw(target caster dice);
+
+
+    push @$vars,{
+
+      type   => 'var',
+
+      names  => $names,
+      values => $values,
+
+      ptr    => [],
+
+    };
+
+  };
+
+
+  # add var nodes
+  map {
+
+    # make leaf node
+    my $var=$branch->init($ARG,unshift_leaves=>1);
+
+    # ^run ctx proc
+    $var->fork_chain(
+
+      dom  => ref $self,
+      name => 'var',
+      skip => 1,
+
+    );
+
+
+  } @$vars;
 
 };
 
@@ -262,15 +333,6 @@ sub set_path($self) {
   $scope->path(@path);
 
   return @path;
-
-};
-
-# ---   *   ---   *   ---
-# outs codestr
-
-sub hier_xlate($self,$branch) {
-  my $st=$branch->{value};
-  $st->{pl_xlate}="sub $st->{name}";
 
 };
 
@@ -365,6 +427,29 @@ sub hier_io_set($self,$branch,$key,@values) {
 };
 
 # ---   *   ---   *   ---
+# ^get
+
+sub hier_io_get($self,$branch,$key) {
+
+  my $mach  = $self->{mach};
+  my $scope = $mach->{scope};
+
+  my @path  = $scope->path();
+  my $lv    = $scope->haslv(@path,$key);
+
+  my $st    = $branch->{value};
+  my $slot  = $st->{$key};
+
+  my @out   = ($lv)
+    ? $lv->leafless_values()
+    : ()
+    ;
+
+  return @out;
+
+};
+
+# ---   *   ---   *   ---
 # copies default values for
 # IO var slots
 
@@ -427,6 +512,7 @@ sub ret_run($self,$branch) {
   my $from  = pop @{$st->{from}};
 
   $scope->path(@$from) if $from;
+  $self->{c3}->jmp(undef);
 
 
   return $out;
@@ -471,6 +557,35 @@ sub hier_io_restore($self,$branch,$key) {
 
 
   return @out;
+
+};
+
+# ---   *   ---   *   ---
+# outs codestr
+
+sub hier_pl_xlate($self,$branch) {
+
+  my $st=$branch->{value};
+  $branch->{pl_xlate}="sub $st->{name}";
+
+  # set path to current branch
+  $self->hier_path($branch);
+
+};
+
+sub ret_pl_xlate($self,$branch) {
+
+  my $par = $branch->{parent};
+  my @ptr = $self->hier_io_get($par,'out');
+
+  my @id  = map {
+    $ARG->pl_xlate(value=>0)
+
+  } @ptr;
+
+
+  $branch->{pl_xlate}=
+    "return (" . (join q[,],@id) . ");\n};";
 
 };
 
