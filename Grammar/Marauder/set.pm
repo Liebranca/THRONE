@@ -99,6 +99,7 @@ sub set($self,$branch) {
 
   $type=lc $type;
 
+
   # errchk args
   throw_set($type)
   if @$vars > $arg_cnt->{$type};
@@ -177,7 +178,7 @@ sub set_run($self,$branch) {
 # ---   *   ---   *   ---
 # out codestr
 
-sub set_pl_xlate($self,$branch) {
+sub set_perl_xlate($self,$branch) {
 
   my $st    = $branch->{value};
 
@@ -213,16 +214,16 @@ sub set_pl_xlate($self,$branch) {
 
     };
 
-    $out="$id=$raw;";
+    $out="$id=$raw;\n";
 
   } else {
 
     my ($dst)=(! $vars->[0]->{id})
-      ? $vars->[0]->pl_xlate(id=>0,scope=>$scope)
-      : $vars->[0]->pl_xlate(value=>0,scope=>$scope)
+      ? $vars->[0]->perl_xlate(id=>0,scope=>$scope)
+      : $vars->[0]->perl_xlate(value=>0,scope=>$scope)
       ;
 
-    my ($value) = $vars->[1]->pl_xlate(
+    my ($value) = $vars->[1]->perl_xlate(
       id=>0,scope=>$scope
 
     );
@@ -231,7 +232,7 @@ sub set_pl_xlate($self,$branch) {
 
   };
 
-  $branch->{pl_xlate}=$out;
+  $branch->{perl_xlate}=$out;
 
 };
 

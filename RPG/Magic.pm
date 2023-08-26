@@ -23,6 +23,7 @@ package RPG::Magic;
   use English qw(-no_match_vars);
 
   use lib $ENV{'ARPATH'}.'/lib/sys/';
+  use lib $ENV{'ARPATH'}.'/lib/';
 
   use Style;
   use Chk;
@@ -30,9 +31,14 @@ package RPG::Magic;
   use Arstd::IO;
   use Arstd::PM;
 
+  use Shb7;
   use parent 'St';
 
   use lib $ENV{'ARPATH'}.'/THRONE/';
+
+  use Grammar::peso::meta;
+  use Grammar::Marauder;
+
   use RPG::Bar;
 
 # ---   *   ---   *   ---
@@ -45,11 +51,32 @@ package RPG::Magic;
 # ROM
 
   Readonly my $TICK_NOOP=>sub ($M) {};
+  Readonly my $GRAM=>'Grammar::Marauder';
 
 # ---   *   ---   *   ---
 # GBL
 
   my $Icemap={};
+
+# ---   *   ---   *   ---
+# reads in peso rom and
+# transpiles it to perl
+
+sub fread($class,@files) {
+
+  my @args=('perl',-meta=>$PE_META);
+
+  map {
+
+    my $dst="$ARG.pm";
+    my $src="$ARG.rom";
+
+    $GRAM->xpile($src,@args,-o=>$dst)
+    if Shb7::moo($dst,$src);
+
+  } @files;
+
+};
 
 # ---   *   ---   *   ---
 # get effect-specific method

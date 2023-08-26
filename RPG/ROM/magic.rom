@@ -1,0 +1,75 @@
+%marauder;
+
+# ---   *   ---   *   ---
+# MAGIC ROM
+# Defines basic spells
+#
+# LIBRE SOFTWARE
+# Licensed under GNU GPL3
+# be a bro and inherit
+#
+# CONTRIBUTORS
+# lyeb,
+
+# ---   *   ---   *   ---
+# info
+
+  VERSION   v0.00.2b;
+  AUTHOR    'IBN-3DILA';
+
+# ---   *   ---   *   ---
+# translation tables
+
+xlate perl 'pm';
+
+  lib $ENV{'ARPATH'} . '/THRONE/';
+  use RPG::Magic;
+
+# ---   *   ---   *   ---
+# negative attr affect
+
+rune damage;
+
+  in  $key   'hp';
+  in  resist 0.0;
+
+
+  var attr target->attrs->$key;
+  var dmg  (-dice/2) * (1-resist);
+
+  attr ->* mod_current dmg;
+
+
+# ---   *   ---   *   ---
+# ^undo
+
+rune restore;
+
+  in  $key   'hp';
+  in  resist 0.0;
+
+
+  var attr target->attrs->$key;
+  var dmg  (dice/2) * (1-resist);
+
+  attr ->* mod_current dmg;
+
+
+# ---   *   ---   *   ---
+# basic attack
+
+rune attack;
+
+  in  resist 0.0;
+
+
+  on resist == 0;
+    var armor target->attrs->armor;
+    cpy resist,0.05 * armor;
+
+  off;
+
+  damage 'hp',resist;
+
+
+# ---   *   ---   *   ---

@@ -46,7 +46,7 @@ package Grammar::Marauder::fcall;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.1;#b
+  our $VERSION = v0.00.2;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -110,6 +110,8 @@ sub fcall($self,$branch) {
     fn   => $fn,
     args => $args,
 
+    xfn  => undef,
+
   };
 
 
@@ -138,7 +140,7 @@ sub fcall_ctx($self,$branch) {
   my $st=$branch->{value};
 
   $self->fcall_args($branch,$st->{args});
-  $st->{fn}=$self->fcall_find($st->{fn});
+  $st->{xfn}=$self->fcall_find($st->{fn});
 
 };
 
@@ -195,7 +197,7 @@ sub fcall_find($self,$name) {
 sub fcall_run($self,$branch) {
 
   my $st  = $branch->{value};
-  my $fn  = $st->{fn};
+  my $fn  = $st->{xfn};
 
 
   # fetch arg values
@@ -246,6 +248,54 @@ sub m_fcall_run($self,$branch) {
 
   # ^call
   return $fn->(@args);
+
+};
+
+# ---   *   ---   *   ---
+# outs codestr
+
+sub fcall_perl_xlate($self,$branch) {
+
+  my $st    = $branch->{value};
+
+  my $fn    = $st->{fn};
+  my $args  = $st->{args};
+
+  my $mach  = $self->{mach};
+  my $scope = $mach->{scope};
+
+  my $rhs   = join q[,],map {
+    $ARG->perl_xlate(id=>0,scope=>$scope)
+
+  } @$args;
+
+
+  $branch->{perl_xlate}="$fn($rhs);\n";
+
+};
+
+# ---   *   ---   *   ---
+# ^outs codestr for member
+
+sub m_fcall_perl_xlate($self,$branch) {
+
+  my $st    = $branch->{value};
+
+  my $fn    = $st->{fn};
+  my $args  = $st->{args};
+
+  my $mach  = $self->{mach};
+  my $scope = $mach->{scope};
+
+
+  my ($lhs) = $fn->perl_xlate(id=>0,scope=>$scope);
+  my $rhs   = join q[,],map {
+    $ARG->perl_xlate(id=>0,scope=>$scope)
+
+  } @$args;
+
+
+  $branch->{perl_xlate}="$lhs($rhs);\n";
 
 };
 

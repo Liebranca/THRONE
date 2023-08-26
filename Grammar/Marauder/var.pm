@@ -191,23 +191,23 @@ sub var_run($self,$branch) {
 # ---   *   ---   *   ---
 # out codestr
 
-sub var_pl_xlate($self,$branch) {
+sub var_perl_xlate($self,$branch) {
 
   my $st   = $branch->{value};
 
   my @args = map {
-    my ($id,$value)=$$ARG->pl_xlate(
+    my ($id,$value)=$$ARG->perl_xlate(
       scope=>$self->{mach}->{scope}
 
     );
 
     $value="\\($value)" if $$ARG->is_ptr();
 
-    "my $id=$value;";
+    "my $id=$value;\n";
 
   } array_values($st->{ptr});
 
-  $branch->{pl_xlate}=join $NULLSTR,@args;
+  $branch->{perl_xlate}=join $NULLSTR,@args;
 
 };
 

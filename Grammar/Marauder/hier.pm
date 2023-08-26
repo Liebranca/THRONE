@@ -563,29 +563,29 @@ sub hier_io_restore($self,$branch,$key) {
 # ---   *   ---   *   ---
 # outs codestr
 
-sub hier_pl_xlate($self,$branch) {
+sub hier_perl_xlate($self,$branch) {
 
   my $st=$branch->{value};
-  $branch->{pl_xlate}="sub $st->{name}";
+  $branch->{perl_xlate}="\nsub $st->{name}\n";
 
   # set path to current branch
   $self->hier_path($branch);
 
 };
 
-sub ret_pl_xlate($self,$branch) {
+sub ret_perl_xlate($self,$branch) {
 
   my $par = $branch->{parent};
   my @ptr = $self->hier_io_get($par,'out');
 
   my @id  = map {
-    $ARG->pl_xlate(value=>0)
+    $ARG->perl_xlate(value=>0)
 
   } @ptr;
 
 
-  $branch->{pl_xlate}=
-    "return (" . (join q[,],@id) . ");\n};";
+  $branch->{perl_xlate}=
+    "\nreturn (" . (join q[,],@id) . ");\n};\n";
 
 };
 

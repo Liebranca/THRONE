@@ -140,15 +140,15 @@ sub roll_run($self,$branch) {
 # ---   *   ---   *   ---
 # outs codestr
 
-sub roll_pl_xlate($self,$branch) {
+sub roll_perl_xlate($self,$branch) {
 
   my $st   = $branch->{value};
 
   my $name = $st->{name};
   my $ire  = $st->{ire};
 
-  $branch->{pl_xlate}=
-    "my \$$name=RPG\::Dice->roll('$ire');";
+  $branch->{perl_xlate}=
+    "my \$$name=RPG\::Dice->roll('$ire');\n";
 
 };
 
