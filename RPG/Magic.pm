@@ -28,6 +28,7 @@ package RPG::Magic;
   use Style;
   use Chk;
 
+  use Arstd::Path;
   use Arstd::IO;
   use Arstd::PM;
 
@@ -39,18 +40,15 @@ package RPG::Magic;
   use Grammar::peso::meta;
   use Grammar::Marauder;
 
-  use RPG::Bar;
-
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.1;#b
+  our $VERSION = v0.00.3;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
 # ROM
 
-  Readonly my $TICK_NOOP=>sub ($M) {};
   Readonly my $GRAM=>'Grammar::Marauder';
 
 # ---   *   ---   *   ---
@@ -61,6 +59,9 @@ package RPG::Magic;
 # ---   *   ---   *   ---
 # reads in peso rom and
 # transpiles it to perl
+#
+# loads in subs decl'd in
+# those rom files to Icemap
 
 sub fread($class,@files) {
 
@@ -68,118 +69,66 @@ sub fread($class,@files) {
 
   map {
 
-    my $dst="$ARG.pm";
-    my $src="$ARG.rom";
+    my $fname = basef($ARG);
+    my $dir   = dirof(__FILE__);
 
-    $GRAM->xpile($src,@args,-o=>$dst)
-    if Shb7::moo($dst,$src);
+    my $dst   = "$dir/Runes/$fname.pm";
+    my $src   = "$ARG.rom";
+
+    my $pkg   = "RPG::Runes::$fname";
+
+
+    # regenerate file if need
+    $GRAM->xpile(
+
+      $src,@args,
+
+      -o   => $dst,
+      -pkg => $pkg,
+
+    ) if Shb7::moo($dst,$src);
+
+
+    # ^load file and get coderefs
+    cload($pkg);
+    my %subs=subsof([$pkg]);
+
+    $Icemap->{$fname}={map {
+      my $fn="$pkg\::$ARG";
+      $ARG=>\&$fn;
+
+    } keys %subs};
+
 
   } @files;
 
 };
 
 # ---   *   ---   *   ---
-# get effect-specific method
-
-sub AUTOLOAD($self,@args) {
-
-  our $AUTOLOAD;
-
-  my $key   = $AUTOLOAD;
-  my $class = ref $self;
-
-  # abort if dstruc
-  return if ! autoload_prologue(\$key);
-
-
-  # abort if method not found
-  my $name = "$class\::$self->{name}";
-  my $tab  = $self->{tab};
-
-  my $fn   = $tab->{$key}
-  or throw_bad_autoload($name,$key);
-
-
-  return (is_coderef($fn))
-    ? $fn->(@args)
-    : $fn
-    ;
-
-};
-
-# ---   *   ---   *   ---
-# cstruc
-
-sub new($class,$name,$crux,%O) {
-
-  # defaults
-  $O{beq}   //= [];
-  $O{tab}   //= {};
-  $O{tick}  //= $TICK_NOOP;
-
-
-  # handle inheritance
-  my $tab={(map {
-    my $super=$class->fetch($ARG);
-    %{$super->{tab}};
-
-  } @{$O{beq}}),%{$O{tab}}};
-
-  $tab->{tick}=$O{tick};
-
-  # make ice
-  my $self=bless {
-
-    name  => $name,
-    tab   => $tab,
-    crux  => $crux,
-
-  },$class;
-
-  # ^register
-  ! exists $Icemap->{$name}
-  or throw_redecl($name);
-
-  $Icemap->{$name}=$self;
-
-
-  return $self;
-
-};
-
-# ---   *   ---   *   ---
-# ^errme
-
-sub throw_redecl($name) {
-
-  errout(
-
-    q[Attempt to overwrite '%s' ]
-  . q[from the magic periodic table],
-
-    lvl  => $AR_FATAL,
-    args => [$name],
-
-  );
-
-};
-
-# ---   *   ---   *   ---
 # ^get existing
 
-sub fetch($class,$name) {
+sub fetch($class,@path) {
 
-  my $out=$Icemap->{$name}
-  or throw_no_ice($name);
+  my $cref=$Icemap;
 
-  return $out;
+  map {
+    $cref=$cref->{$ARG}
+
+  } @path;
+
+  defined $cref or throw_no_ice(@path);
+
+
+  return $cref;
 
 };
 
 # ---   *   ---   *   ---
 # ^errme
 
-sub throw_no_ice($name) {
+sub throw_no_ice(@path) {
+
+  my $name=join q[ ],@path;
 
   errout(
 
@@ -205,18 +154,20 @@ sub charge($class,$spell,$dst,$src,$mag) {
   # ^ice holds spell state
   return bless {
 
-    spell => $spell,
+    spell  => $spell,
 
-    dst   => $dst,
-    src   => $src,
+    target => $dst,
+    caster => $src,
 
-    mag   => $mag,
-    dur   => $spell->{dur},
+    dice   => $mag,
+    tick   => 0,
 
-    ahead => [@eff],
+    dur    => $spell->{dur},
 
-    self  => undef,
-    prev  => [],
+    ahead  => [@eff],
+
+    self   => undef,
+    prev   => [],
 
 
   },$class;
@@ -229,7 +180,7 @@ sub charge($class,$spell,$dst,$src,$mag) {
 sub get_next($M) {
 
   $M->{self}=shift @{$M->{ahead}};
-  $M->{self}->{crux}->($M);
+  $M->{self}->($M);
 
   push @{$M->{prev}},$M->{self};
 

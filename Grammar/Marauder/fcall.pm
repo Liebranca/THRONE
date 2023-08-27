@@ -151,8 +151,8 @@ sub fcall_args($self,$branch,$args) {
 
   my $mach = $self->{mach};
 
-  my $par  = $branch->{parent};
-  my $type = $par->{value}->{type};
+  my $f    = $self->{frame};
+  my $type = $f->{-chier_t};
 
   if($type eq 'rune') {
 

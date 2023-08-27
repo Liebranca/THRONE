@@ -34,7 +34,7 @@ package RPG::Status;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.1;#b
+  our $VERSION = v0.00.2;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -176,7 +176,7 @@ sub tick($self) {
       $M->{self}  = shift @ahead;
       $M->{ahead} = \@ahead;
 
-      $ARG->tick($M);
+      $ARG->($M);
 
       push @{$M->{prev}},$M->{prev};
 

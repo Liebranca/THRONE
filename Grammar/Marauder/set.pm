@@ -185,7 +185,7 @@ sub set_perl_xlate($self,$branch) {
   my $mach  = $self->{mach};
   my $scope = $mach->{scope};
 
-  my $type  = $st->{vars};
+  my $type  = $st->{type};
   my $vars  = $st->{vars};
 
   my $out   = $NULLSTR;
@@ -214,21 +214,33 @@ sub set_perl_xlate($self,$branch) {
 
     };
 
-    $out="$id=$raw;\n";
+    $out="$id=$raw;";
 
   } else {
 
-    my ($dst)=(! $vars->[0]->{id})
-      ? $vars->[0]->perl_xlate(id=>0,scope=>$scope)
-      : $vars->[0]->perl_xlate(value=>0,scope=>$scope)
+    my ($a,$b)=@$vars;
+
+    my ($dst)=(! $a->{id})
+      ? $a->perl_xlate(id=>0,scope=>$scope)
+      : $a->perl_xlate(value=>0,scope=>$scope)
       ;
 
-    my ($value) = $vars->[1]->perl_xlate(
+    my ($value)=$b->perl_xlate(
       id=>0,scope=>$scope
 
     );
 
-    $out="$dst=$value;";
+
+    if($type eq 'cpy') {
+      $out="$dst=$value;";
+
+    } elsif($type eq 'mov') {
+      $out="$dst=$value;$value=undef;";
+
+    } else {
+      $out="($dst,$value)=($value,$dst);";
+
+    };
 
   };
 

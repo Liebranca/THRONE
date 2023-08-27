@@ -32,11 +32,11 @@ package main;
 # ROM
 
   Readonly my $ROMD=>
-    $ENV{'ARPATH'} . '/THRONE/RPG/ROM/';
+    $ENV{'ARPATH'} . '/THRONE/ROM/Runes/';
 
 # ---   *   ---   *   ---
 # the bit
 
-RPG::Magic->fread("$ROMD/magic");
+RPG::Magic->fread("${ROMD}Basic");
 
 # ---   *   ---   *   ---

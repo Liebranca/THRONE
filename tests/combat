@@ -27,50 +27,7 @@
 
   use RPG::Cell;
   use RPG::Actor;
-  use RPG::Magic;
   use RPG::Spell;
-
-# ---   *   ---   *   ---
-# create effects
-
-sub damage($M) {
-
-  my $dmg   = $M->{mag}/2;
-
-  my $attrs = $M->{dst}->{attrs};
-  my $key   = $M->{self}->key();
-
-  $attrs->{$key}->mod_current(-$dmg);
-
-};
-
-# ---   *   ---   *   ---
-# give health back
-
-sub heal($M) {
-
-  my $dmg   = $M->{mag}/2;
-
-  my $attrs = $M->{dst}->{attrs};
-  my $key   = $M->{self}->key();
-
-  $attrs->{$key}->mod_current($dmg);
-
-};
-
-# ---   *   ---   *   ---
-# ^passive
-
-sub heal_tick($M) {
-
-  my $mag=$M->{mag};
-  $M->{mag}=$mag/$M->{spell}->{dur};
-
-  heal($M);
-
-  $M->{mag}=$mag;
-
-};
 
 # ---   *   ---   *   ---
 # divine inspiration
@@ -124,67 +81,6 @@ sub set_bar_color($dst,$key,$color) {
   $attr->{bar}->update_animar();
 
   return $old;
-
-};
-
-sub poison($M) {
-
-  $M->{poison_end}  //= set_bar_color(
-
-    $M->{dst},
-    $M->{self}->key(),
-
-    0b00110001,
-
-  );
-
-};
-
-# ---   *   ---   *   ---
-# ^linger
-
-sub poison_tick($M) {
-
-  $M->{poison_mag}//=$M->{mag};
-
-  my ($mag,$old)=(
-    $M->{poison_mag},
-    $M->{mag}
-
-  );
-
-  $M->{mag}=$mag/2;
-  damage($M);
-
-  print
-
-    "\e[0H\e[0K$M->{dst}->{name} takes "
-  . "$M->{mag} "
-
-  . "poison damage!"
-
-  ;
-
-  $mag+=$mag*0.25;
-
-  $M->{poison_mag} = $mag;
-  $M->{mag}        = $old;
-
-
-  if(1 == $M->{dur} && exists $M->{poison_end}) {
-
-    set_bar_color(
-
-      $M->{dst},
-      $M->{poison_self}->key(),
-
-      $M->{poison_end},
-
-    );
-
-    delete $M->{poison_end};
-
-  };
 
 };
 

@@ -23,6 +23,7 @@ package RPG::Spell;
   use English qw(-no_match_vars);
 
   use lib $ENV{'ARPATH'}.'/THRONE/';
+
   use RPG::Dice;
   use RPG::Magic;
 
@@ -35,7 +36,7 @@ package RPG::Spell;
 # ---   *   ---   *   ---
 # info
 
-  our $VERSION = v0.00.3;#b
+  our $VERSION = v0.00.4;#b
   our $AUTHOR  = 'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -123,7 +124,7 @@ sub new($class,%O) {
 
   # get magic effects from names
   @$eff=map {
-    RPG::Magic->fetch($ARG)
+    RPG::Magic->fetch(split q[ ],$ARG)
 
   } @$eff;
 
@@ -176,7 +177,7 @@ sub table($class,@ar) {
 # amplifies base values of
 # spell accto mana cost:
 #
-#   +1 duration for every 2nd
+#   +1 duration for every 2nd degree
 #   +1 area for every 3rd
 #   +1 hit die for every 4th
 
@@ -215,6 +216,7 @@ sub cast($self,$dst,$src) {
 
   } @{$self->{eff}};
 
+
   if($self->{dur}) {
 
     $dst->{status}->add(
@@ -225,6 +227,9 @@ sub cast($self,$dst,$src) {
       anim  => $self->{anim},
 
     );
+
+    $M->{tick}  = 1;
+    $M->{dice} /= 4;
 
   };
 

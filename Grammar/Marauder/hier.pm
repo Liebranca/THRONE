@@ -261,7 +261,7 @@ sub hier_vars($self,$branch) {
       push @$names,@$name;
       push @$values,@$value;
 
-    } qw(target caster dice);
+    } qw(target caster dice tick);
 
 
     push @$vars,{

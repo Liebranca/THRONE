@@ -1,0 +1,129 @@
+%marauder;
+
+# ---   *   ---   *   ---
+# BASIC RUNES
+# Words you *should* know
+#
+# LIBRE SOFTWARE
+# Licensed under GNU GPL3
+# be a bro and inherit
+#
+# CONTRIBUTORS
+# lyeb,
+
+# ---   *   ---   *   ---
+# info
+
+  VERSION   v0.00.2b;
+  AUTHOR    'IBN-3DILA';
+
+# ---   *   ---   *   ---
+# negative attr affect
+
+rune damage;
+
+  in  $key   'hp';
+  in  resist 0.0;
+
+
+  var attr target->attrs->$key;
+  var dmg  (-dice/2) * (1-resist);
+
+  attr ->* mod_current dmg;
+
+
+# ---   *   ---   *   ---
+# ^undo
+
+rune restore;
+
+  in  $key   'hp';
+  in  resist 0.0;
+
+
+  var attr target->attrs->$key;
+  var dmg  (dice/2) * (1-resist);
+
+  attr ->* mod_current dmg;
+
+
+# ---   *   ---   *   ---
+# basic attack
+
+rune attack;
+
+  in  resist 0.0;
+
+
+  on resist == 0;
+    var armor target->attrs->armor;
+    cpy resist,0.05 * armor;
+
+  off;
+
+
+  # forbid duration
+  on tick == 0;
+    damage 'hp',resist;
+
+  off;
+
+
+# ---   *   ---   *   ---
+# slowly increasing DOT
+
+rune poison;
+
+  # forbid instant
+  on tick == 1;
+
+    # apply damage
+    var resist target->attrs->grit;
+    damage 'hp',0.10 * resist;
+
+    # ^poisoning gets worse over time!
+    var grow dice*0.25;
+    cpy dice,dice+grow;
+
+  off;
+
+
+# ---   *   ---   *   ---
+# divine inspiration
+
+rune bless;
+
+  # forbid linger
+  on tick == 0;
+    var grow dice/4;
+    cpy dice,dice+grow;
+
+  off;
+
+
+# ---   *   ---   *   ---
+# demonic power
+
+rune evil;
+
+  on tick == 0;
+
+    var old   1*dice;
+    var grow  old*1.5;
+
+
+    # swap target and inflict
+    # self damage
+    cpy dice,2/dice;
+    wap caster,target;
+
+    damage 'hp',0;
+
+
+    # ^grow roll and re-swap
+    cpy dice,old+grow;
+    wap caster,target;
+
+  off;
+
+# ---   *   ---   *   ---
