@@ -29,161 +29,11 @@
   use RPG::Actor;
   use RPG::Spell;
 
-# ---   *   ---   *   ---
-# divine inspiration
+  use RPG::Magic (
 
-sub _bless($M) {
-
-  $M->{bless_mag}//=$M->{mag};
-
-  my $dice = $M->{spell}->{dice};
-  my $mag  = $M->{bless_mag};
-
-  my $res  = $dice->{sides} * $dice->{num};
-  my $buff = 1*($mag/$res);
-
-  $M->{mag}+=$buff;
-
-};
-
-# ---   *   ---   *   ---
-# sacrifice HP for greater power!
-
-sub evil($M) {
-
-  my $dice = $M->{spell}->{dice};
-
-  my $dst  = $M->{dst};
-  my $mag  = $M->{mag};
-
-  my $res  = $dice->{sides} * $dice->{num};
-  my $dmg  = $res-($res-$mag);
-
-  $M->{mag} = 2/($dmg/$res);
-  $M->{dst} = $M->{src};
-
-  damage($M);
-
-  $M->{mag} = $mag * 1.5;
-  $M->{dst} = $dst;
-
-};
-
-# ---   *   ---   *   ---
-# DOT
-
-sub set_bar_color($dst,$key,$color) {
-
-  my $attr = $dst->{attrs}->{$key};
-  my $old  = $attr->{bar}->{color};
-
-  $attr->{bar}->{color}=$color;
-  $attr->{bar}->update_animar();
-
-  return $old;
-
-};
-
-# ---   *   ---   *   ---
-# buff test
-
-sub hearten($M) {
-
-  my $key   = $M->{self}->key();
-  my $spell = $M->{spell};
-  my $attrs = $M->{src}->{attrs};
-
-  $attrs->{$key}->add_modifiers(
-    $spell->{name}=>$M->{mag}
+    $ENV{'ARPATH'} . '/THRONE/ROM/Runes/Basic'
 
   );
-
-};
-
-sub hearten_tick($M) {
-
-  if(1 == $M->{dur}) {
-
-    my $key  = $M->{self}->key();
-    my $attr = $M->{src}->{attrs}->{$key};
-
-    $attr->clear_modifiers(
-      $M->{spell}->{name}
-
-    );
-
-  };
-
-};
-
-# ---   *   ---   *   ---
-# ^add to table
-
-RPG::Magic->new(
-
-  'attack' => \&damage,
-
-  tab=>{
-    key=>'hp',
-
-  },
-
-);
-
-RPG::Magic->new(
-  'bless' => \&_bless,
-
-);
-
-RPG::Magic->new(
-
-  'evil' => \&evil,
-
-  tab=>{
-    key=>'hp',
-
-  },
-
-);
-
-RPG::Magic->new(
-
-  'poison' => \&poison,
-
-  tab=>{
-    key=>'hp',
-
-  },
-
-  tick=>\&poison_tick,
-
-);
-
-RPG::Magic->new(
-
-  'heal' => \&heal,
-
-  tab=>{
-    key=>'hp'
-
-  },
-
-  tick=>\&heal_tick,
-
-);
-
-RPG::Magic->new(
-
-  'hearten' => \&hearten,
-
-  tab=>{
-    key=>'hp'
-
-  },
-
-  tick=>\&hearten_tick,
-
-);
 
 # ---   *   ---   *   ---
 # ^fill out the grimoire
@@ -194,7 +44,7 @@ RPG::Spell->new(
   school => 'Combat',
 
   degree => 0,
-  eff    => ['attack'],
+  eff    => ['Basic attack'],
 
   desc   => 'Cuts your target!',
 
@@ -208,7 +58,12 @@ RPG::Spell->new(
   degree => 3,
   dur    => 3,
 
-  eff    => ['evil','poison','attack'],
+  eff    => [
+    'Basic evil',
+    'Basic poison',
+    'Basic attack'
+
+  ],
 
   desc   => 'Damages the enemy over time',
 
@@ -223,7 +78,12 @@ RPG::Spell->new(
   schhol => 'Faith',
 
   degree => 2,
-  eff    => ['bless','bless','attack'],
+  eff    => [
+    'Basic bless',
+    'Basic bless',
+    'Basic attack'
+
+  ],
 
   desc   => 'Doubly righteous attack',
 
@@ -238,7 +98,11 @@ RPG::Spell->new(
   school => 'Faith',
 
   degree => 1,
-  eff    => ['bless','attack'],
+  eff    => [
+    'Basic bless',
+    'Basic attack'
+
+  ],
 
   desc   => 'Cuts your target -- righteously!',
 
@@ -250,26 +114,17 @@ RPG::Spell->new(
   school => 'Evil',
 
   degree => 2,
-  eff    => ['bless','evil','attack'],
+  eff    => [
+    'Basic bless',
+    'Basic evil',
+    'Basic attack'
+
+  ],
 
   desc   => 'Cuts your target -- maliciously!',
 
   anim   => [chr(0x1D8)],
   color  => 0b01100011,
-
-);
-
-RPG::Spell->new(
-
-  name   => 'Prayer',
-  school => 'Faith',
-
-  degree => 3,
-  dur    => 2,
-
-  eff    => ['bless','hearten','heal'],
-
-  desc   => 'Increases HP and HP regen',
 
 );
 
@@ -290,23 +145,25 @@ my $arena=RPG::Cell->new(
 
 my $jack=RPG::Actor->new(
 
-  name => 'Jack',
+  name  => 'Jack',
 
-  cell => $arena,
-  pos  => [0,0],
+  cell  => $arena,
+  pos   => [0,0],
 
-  grim => ['Slash','Holy Slash','Smite'],
+  grim  => ['Slash','Holy Slash','Smite'],
+  attrs => {armor=>{base=>0},grit=>{base=>0}},
 
 );
 
 my $jane=RPG::Actor->new(
 
-  name => 'Jane',
+  name  => 'Jane',
 
-  cell => $arena,
-  pos  => [2,3],
+  cell  => $arena,
+  pos   => [2,3],
 
-  grim => ['Slash','Unholy Slash','Snake Venom'],
+  grim  => ['Slash','Unholy Slash','Snake Venom'],
+  attrs => {armor=>{base=>0},grit=>{base=>0}},
 
 );
 

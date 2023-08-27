@@ -124,7 +124,7 @@ sub new($class,%O) {
 
   # get magic effects from names
   @$eff=map {
-    RPG::Magic->fetch(split q[ ],$ARG)
+    RPG::Magic->fetch(split $SPACE_RE,$ARG);
 
   } @$eff;
 

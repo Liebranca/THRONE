@@ -55,9 +55,21 @@ package RPG::Magic;
 # GBL
 
   my $Icemap={};
+  my $Source=[];
 
 # ---   *   ---   *   ---
-# reads in peso rom and
+# passes peso rom to module
+
+sub import($class,@files) {
+
+  return if ! @files;
+
+  push @$Source,@files;
+
+};
+
+# ---   *   ---   *   ---
+# ^reads in peso rom and
 # transpiles it to perl
 #
 # loads in subs decl'd in
@@ -76,7 +88,6 @@ sub fread($class,@files) {
     my $src   = "$ARG.rom";
 
     my $pkg   = "RPG::Runes::$fname";
-
 
     # regenerate file if need
     $GRAM->xpile(
@@ -105,6 +116,14 @@ sub fread($class,@files) {
 };
 
 # ---   *   ---   *   ---
+# ^auto
+
+INIT {
+  RPG::Magic->fread(@$Source);
+
+};
+
+# ---   *   ---   *   ---
 # ^get existing
 
 sub fetch($class,@path) {
@@ -112,7 +131,7 @@ sub fetch($class,@path) {
   my $cref=$Icemap;
 
   map {
-    $cref=$cref->{$ARG}
+    $cref=$cref->{$ARG};
 
   } @path;
 

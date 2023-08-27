@@ -14,7 +14,7 @@
 # ---   *   ---   *   ---
 # info
 
-  VERSION   v0.00.2b;
+  VERSION   v0.00.3b;
   AUTHOR    'IBN-3DILA';
 
 # ---   *   ---   *   ---
@@ -72,7 +72,7 @@ rune attack;
 # ---   *   ---   *   ---
 # slowly increasing DOT
 
-rune poison;
+rune poison; 
 
   # forbid instant
   on tick == 1;
@@ -81,9 +81,8 @@ rune poison;
     var resist target->attrs->grit;
     damage 'hp',0.10 * resist;
 
-    # ^poisoning gets worse over time!
-    var grow dice*0.25;
-    cpy dice,dice+grow;
+    # ^gets worse over time!
+    cpy dice,dice*1.25;
 
   off;
 
@@ -95,8 +94,7 @@ rune bless;
 
   # forbid linger
   on tick == 0;
-    var grow dice/4;
-    cpy dice,dice+grow;
+    cpy dice,dice*1.25;
 
   off;
 
@@ -108,8 +106,7 @@ rune evil;
 
   on tick == 0;
 
-    var old   1*dice;
-    var grow  old*1.5;
+    var grow dice*1.5;
 
 
     # swap target and inflict
@@ -121,7 +118,7 @@ rune evil;
 
 
     # ^grow roll and re-swap
-    cpy dice,old+grow;
+    cpy dice,grow;
     wap caster,target;
 
   off;
